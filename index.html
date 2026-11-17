@@ -2,11 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V7</title>
+<title>③ST-mock-up_V8</title>
 
 <script>
 /*
@@ -16,7 +17,7 @@
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 7;
+  const EMBEDDED_VERSION = 8;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -81,7 +82,26 @@ button:disabled{opacity:.45;cursor:default}
 input[type=range]{width:100%}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
 .modal-box{background:#161d26;border:1px solid #2a3643;border-radius:12px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
-#black-screen{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;touch-action:none;user-select:none;-webkit-user-select:none}
+#black-screen{
+  background-color:#000000 !important;
+  width:100vw;
+  height:100dvh;
+  min-height:100vh;
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  margin:0;padding:0;
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:env(safe-area-inset-bottom);
+  z-index:99999;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
 #black-clock{font-size:34px;color:#3d4753}
 #btn-rec-stop{touch-action:none;user-select:none;-webkit-user-select:none}
 video{width:100%;border-radius:12px;background:#000}
@@ -111,7 +131,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V7</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V8</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -191,8 +211,8 @@ audio{width:100%}
 <!-- 基準音のポップアップ -->
 <div id="ref-dialog" class="modal" hidden>
 <div class="modal-box">
-<h2>「あ〜」と声を出してください</h2>
-<p>スマートフォンを顔から少し離して。</p>
+<h2 id="ref-dialog-title">「あ〜」と声を出してください</h2>
+<p id="ref-dialog-body">スマートフォンを顔から少し離して。</p>
 <p class="muted">この時の音量が、いびきの大きさを把握する目安になります。</p>
 </div>
 </div>
@@ -293,8 +313,8 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 7;
-const APP_VERSION = "③ST-mock-up_V7";
+const APP_VERSION_NUMBER = 8;
+const APP_VERSION = "③ST-mock-up_V8";
 const $ = (id) => document.getElementById(id);
 
 /* 検知の定数は手順書の現行値を一か所に置く */
@@ -308,7 +328,8 @@ const RECORDING_CONFIG = Object.freeze({
   postSeconds: 5,
   referenceQuietSeconds: 2,
   referenceVoiceSeconds: 2,
-  referenceMinimumDb: -60
+  referenceMinimumDb: -60,
+  referenceTargetDb: -20
 });
 
 const REQUIRED_STORES = ["appkv", "sessions", "secs", "events", "clips"];
@@ -682,8 +703,7 @@ const METER = {
 /* 基準音の録音の設定 */
 const REF = {
   busy: false,
-  url: null,
-  seconds: 2.5
+  url: null
 };
 
 function clamp(value, low, high) {
@@ -852,7 +872,7 @@ async function startMeterQuietly(page) {
   }
 }
 
-/* ===== 基準音の録音：マイクから2.5秒録り、音量を測って保存する ===== */
+/* ===== 基準音の録音：静かな所2秒 → 「あ〜」2秒。区間最大で測り、calDbを計算する ===== */
 async function recordReference() {
   if (!METER.stream || !METER.analyser) {
     throw makeError("MicNotReady", "マイクが許可されていません。セッティング①で「マイクとモーションセンサーを許可」を押してください。");
@@ -872,6 +892,30 @@ async function recordReference() {
     MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)
   ) || "";
 
+  const buffer = new Float32Array(METER.analyser.fftSize);
+
+  /* 1. 静かな所2秒を測る */
+  $("ref-dialog-title").textContent = "静かにしてお待ちください";
+  $("ref-dialog-body").textContent = "周りの音の大きさを測っています（2秒）。";
+
+  let quietSum = 0;
+  let quietCount = 0;
+  const quietSampler = setInterval(() => {
+    quietSum += levelDb(METER.analyser, buffer);
+    quietCount += 1;
+  }, 100);
+
+  try {
+    await wait(RECORDING_CONFIG.referenceQuietSeconds * 1000);
+  } finally {
+    clearInterval(quietSampler);
+  }
+  const quietDb = quietSum / Math.max(quietCount, 1);
+
+  /* 2. 「あ〜」2秒を測り、音も保存する（スライダーは焼き付けない） */
+  $("ref-dialog-title").textContent = "「あ〜」と声を出してください";
+  $("ref-dialog-body").textContent = "スマートフォンを顔から少し離して。";
+
   const recorder = new MediaRecorder(METER.stream, mimeType ? { mimeType } : undefined);
   const chunks = [];
   let recorderError = null;
@@ -885,12 +929,11 @@ async function recordReference() {
 
   const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
 
-  const buffer = new Float32Array(METER.analyser.fftSize);
   let peakDb = -Infinity;
   let sumDb = 0;
   let count = 0;
 
-  const sampler = setInterval(() => {
+  const voiceSampler = setInterval(() => {
     const db = levelDb(METER.analyser, buffer);
     peakDb = Math.max(peakDb, db);
     sumDb += db;
@@ -899,11 +942,11 @@ async function recordReference() {
 
   try {
     recorder.start(250);
-    await wait(REF.seconds * 1000);
+    await wait(RECORDING_CONFIG.referenceVoiceSeconds * 1000);
     recorder.stop();
     await stopped;
   } finally {
-    clearInterval(sampler);
+    clearInterval(voiceSampler);
   }
 
   if (recorderError) throw recorderError;
@@ -917,12 +960,16 @@ async function recordReference() {
     throw makeError("ReferenceTooQuiet", "音が小さすぎます。スマートフォンを顔から少し離して、「あ〜」と声を出してもう一度押してください。");
   }
 
+  const calDb = RECORDING_CONFIG.referenceTargetDb - peakDb;
+
   return {
     blob,
     type: blob.type,
-    seconds: REF.seconds,
+    seconds: RECORDING_CONFIG.referenceVoiceSeconds,
+    quietDb,
     peakDb,
-    averageDb: sumDb / Math.max(count, 1)
+    averageDb: sumDb / Math.max(count, 1),
+    calDb
   };
 }
 
@@ -1271,9 +1318,6 @@ $("btn-ng").addEventListener("click", () => {
   showPage("perm");
 });
 
-/* ===== セッティング①→②：次へ ===== */
-$("btn-setup1-next").addEventListener("click", () => showPage("setup2"));
-
 /* ===== セッティング②：基準音を録る ===== */
 $("btn-ref-rec").addEventListener("click", async () => {
   if (REF.busy) return;
@@ -1292,8 +1336,10 @@ $("btn-ref-rec").addEventListener("click", async () => {
       blob: result.blob,
       type: result.type,
       seconds: result.seconds,
+      quietDb: result.quietDb,
       peakDb: result.peakDb,
       averageDb: result.averageDb,
+      calDb: result.calDb,
       savedAt: Date.now()
     });
 
@@ -1302,7 +1348,12 @@ $("btn-ref-rec").addEventListener("click", async () => {
       throw makeError("ReferenceReadbackError", "保存した基準音を読み戻せませんでした。");
     }
 
-    await saveSetup({ perms: S.perms, refDone: true, refPeakDb: result.peakDb });
+    await saveSetup({
+      perms: S.perms,
+      refDone: true,
+      refPeakDb: result.peakDb,
+      calDb: result.calDb
+    });
     S.refDone = true;
     $("btn-ref-play").disabled = false;
     msg("ref-msg", "基準音を保存しました。「⑨ 基準音を聞く」で確認できます。");
@@ -1396,6 +1447,32 @@ function longPress(element, milliseconds, callback) {
   });
 }
 
+/* ===== 黒画面の完全黒色化（白帯対策） ===== */
+function enterBlackScreen() {
+  refreshBlackClock();
+  document.documentElement.style.setProperty("background-color", "#000000", "important");
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.setProperty("background-color", "#000000", "important");
+  document.body.style.overflow = "hidden";
+  $("black-screen").hidden = false;
+
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+
+function exitBlackScreen() {
+  $("black-screen").hidden = true;
+  document.documentElement.style.removeProperty("background-color");
+  document.documentElement.style.overflow = "";
+  document.body.style.removeProperty("background-color");
+  document.body.style.overflow = "";
+
+  if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
 /* ===== 記録（UIのみ。録音の保存は次の段階で接続） ===== */
 function setRecUI() {
   $("btn-rec-start").hidden = S.recording;
@@ -1410,7 +1487,7 @@ $("btn-rec-start").addEventListener("click", () => {
 
 longPress($("btn-rec-stop"), 2000, () => {
   S.recording = false;
-  $("black-screen").hidden = true;
+  exitBlackScreen();
   setRecUI();
 });
 
@@ -1420,14 +1497,9 @@ function refreshBlackClock() {
     date.getHours() + ":" + String(date.getMinutes()).padStart(2, "0");
 }
 
-$("btn-rec-black").addEventListener("click", () => {
-  refreshBlackClock();
-  $("black-screen").hidden = false;
-});
+$("btn-rec-black").addEventListener("click", enterBlackScreen);
 
-longPress($("black-screen"), 2000, () => {
-  $("black-screen").hidden = true;
-});
+longPress($("black-screen"), 2000, exitBlackScreen);
 
 setInterval(() => {
   if (!$("black-screen").hidden) refreshBlackClock();
