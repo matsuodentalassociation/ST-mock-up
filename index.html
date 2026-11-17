@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>muse モックアップv1</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0f14;color:#e8eef4;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+.page{display:flex;flex-direction:column;gap:14px}
+[hidden]{display:none!important}
+h1{font-size:20px;margin:4px 0}
+h2{font-size:16px;margin:4px 0}
+p{margin:4px 0;line-height:1.6}
+.muted{color:#9aa5b1;font-size:13px}
+.err{color:#ff8a80;font-size:14px}
+.card{background:#12181f;border:1px solid #232d38;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+button{font:inherit;font-size:16px;padding:12px;border-radius:10px;border:1px solid #2a3643;background:#1b242e;color:#e8eef4;cursor:pointer;width:100%}
+button.primary{padding:16px;font-size:17px;background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}
+button.sub{width:auto;padding:7px 12px;font-size:13px}
+button.danger{background:#5b1d1d;border-color:#7a2a2a;color:#ffb4ab}
+button:disabled{opacity:.45;cursor:default}
+.field{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #232d38;padding:8px 0}
+.field span{color:#9aa5b1}
+.field b{font-weight:600;text-align:right}
+.bar{height:14px;background:#1b242e;border:1px solid #2a3643;border-radius:7px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#4a90d9}
+input[type=range]{width:100%}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal-box{background:#161d26;border:1px solid #2a3643;border-radius:12px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px}
+.pick-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #2a3643;padding:6px 0}
+#black-screen{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+#black-clock{font-size:34px;color:#3d4753}
+video{width:100%;border-radius:12px;background:#000}
+.scan-frame{border:2px solid #4a90d9;border-radius:12px;height:120px;display:flex;align-items:center;justify-content:center;color:#9aa5b1}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal div{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid #232d38;border-radius:8px;color:#9aa5b1;font-size:13px}
+.cal.mark{color:#fff;border-color:#4a90d9}
+.graph-box{height:180px;border:1px solid #232d38;border-radius:12px;background:#0e1319}
+.tagrow{display:flex;gap:8px;flex-wrap:wrap}
+.tag{font-size:13px;border:1px solid #2a3643;border-radius:999px;padding:4px 10px;color:#c7d0da}
+audio{width:100%}
+</style>
+</head>
+<body>
+
+<!-- 1ページ　許可 -->
+<main id="page-perm" class="page" hidden>
+<h1>SomnoLogへようこそ</h1>
+<p>このアプリはカメラ・マイク・モーションセンサーを使用します。</p>
+<button id="btn-perm" class="primary" type="button">① センサーの使用を許可します</button>
+<p id="perm-msg" class="err" hidden></p>
+</main>
+
+<!-- 2ページ　入口 -->
+<main id="page-home" class="page" hidden>
+<h1>muse モックアップ</h1>
+<button id="btn-to-scan" class="primary" type="button">② 二次元コードを読む</button>
+<button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
+<button id="btn-start" type="button">④ 睡眠記録を始める</button>
+<div class="card">
+<div class="field"><span>現在のバージョン</span><b>モックアップv1</b></div>
+<button id="btn-update" class="sub" type="button">アプリの更新</button>
+</div>
+<p id="home-msg" class="err" hidden></p>
+</main>
+
+<!-- 3ページ　登録の入口（カメラで読む） -->
+<main id="page-scan" class="page" hidden>
+<h1>二次元コードを読む</h1>
+<video id="scan-video" playsinline muted></video>
+<div class="scan-frame">読み取りの枠</div>
+<p id="scan-msg" class="muted"></p>
+<button id="btn-scan-back" class="sub" type="button">入口に戻る</button>
+</main>
+
+<!-- 4ページ　登録の入口（メールから） -->
+<main id="page-mail" class="page" hidden>
+<h1>メールの情報を読み込む</h1>
+<p>診療所からのメールに添付された、患者情報のファイルを取り込みます。文字を入力したり、写したりする必要はありません。</p>
+<button id="btn-import" class="primary" type="button">取り込む</button>
+<input id="file-import" type="file" accept=".txt,.json,text/plain,application/json" hidden>
+<p id="mail-msg" class="err" hidden></p>
+<button id="btn-mail-back" class="sub" type="button">入口に戻る</button>
+</main>
+
+<!-- 5ページ　情報の確認 -->
+<main id="page-confirm" class="page" hidden>
+<h1>情報の確認</h1>
+<div class="card">
+<div class="field"><span>診療所名</span><b id="cf-clinic">—</b></div>
+<div class="field"><span>登録番号2</span><b id="cf-chart">—</b></div>
+<div class="field"><span>表示名</span><b id="cf-name">—</b></div>
+<div class="field"><span>登録番号1</span><b id="cf-serial">—</b></div>
+<div class="field"><span>ログ共有通知先</span><b id="cf-mail">—</b></div>
+</div>
+<p class="muted">診療所名／登録番号2／表示名はプライバシー保護のため、仮のものが発行される場合があります。</p>
+<button id="btn-ok" class="primary" type="button">⑥ 情報は合っている</button>
+<button id="btn-ng" type="button">⑦ 情報が間違っている（1ページに戻る）</button>
+</main>
+
+<!-- セッティング①　動作の確認（図のない画面のため仮置き） -->
+<main id="page-setup1" class="page" hidden>
+<h1>セッティング①</h1>
+<div class="card">
+<span class="muted">マイク</span>
+<div class="bar"><i id="bar-mic1"></i></div>
+<span class="muted">モーションセンサー</span>
+<div class="bar"><i id="bar-motion1"></i></div>
+</div>
+<button id="btn-setup1-next" class="primary" type="button">次へ</button>
+</main>
+
+<!-- 6ページ　セッティング②（基準音） -->
+<main id="page-setup2" class="page" hidden>
+<h1>セッティング②</h1>
+<div class="card">
+<span class="muted">マイク</span>
+<div class="bar"><i id="bar-mic2"></i></div>
+<span class="muted">モーションセンサー</span>
+<div class="bar"><i id="bar-motion2"></i></div>
+</div>
+<button id="btn-ref-rec" class="primary" type="button">⑧ 基準音を録る</button>
+<button id="btn-ref-play" type="button" disabled>⑨ 基準音を聞く</button>
+<p id="ref-msg" class="muted" hidden></p>
+<div class="card">
+<span class="muted">音圧調整</span>
+<input id="gain-slider" type="range" min="-9" max="18" step="1" value="0">
+</div>
+<button id="btn-setup-done" class="primary" type="button">⑩ 完了</button>
+<p id="setup2-msg" class="err" hidden></p>
+</main>
+
+<!-- 基準音のポップアップ -->
+<div id="ref-dialog" class="modal" hidden>
+<div class="modal-box">
+<h2>「あ〜」と声を出してください</h2>
+<p>スマートフォンを顔から少し離して。</p>
+<p class="muted">この時の音量が、いびきの大きさを把握する目安になります。</p>
+</div>
+</div>
+
+<!-- 7ページ　記録する -->
+<main id="page-record" class="page" hidden>
+<h1>記録</h1>
+<div class="card">
+<span class="muted">マイク</span>
+<div class="bar"><i id="bar-mic3"></i></div>
+<span class="muted">体動</span>
+<div class="bar"><i id="bar-motion3"></i></div>
+</div>
+<button id="btn-rec-start" class="primary" type="button">⑪ 記録開始</button>
+<button id="btn-rec-black" class="primary" type="button" hidden>⑫ 黒画面に切り替える</button>
+<button id="btn-rec-stop" type="button" hidden>⑬ 停止（2秒以上長押し）</button>
+<button id="btn-to-calendar" class="sub" type="button">⑭ 記録カレンダーを見る</button>
+</main>
+
+<!-- 黒画面 -->
+<div id="black-screen" hidden>
+<span id="black-clock"></span>
+<span class="muted">2秒以上長押しで戻る</span>
+</div>
+
+<!-- 8ページ　見返す（カレンダーと詳細） -->
+<main id="page-review" class="page" hidden>
+<h1>記録カレンダー</h1>
+<div id="cal-grid" class="cal"></div>
+<p id="review-msg" class="muted">記録はまだありません。</p>
+<section id="detail-box" class="card" hidden>
+<h2>その日の記録</h2>
+<div class="field"><span>開始</span><b id="dt-start">—</b></div>
+<div class="field"><span>睡眠記録時間</span><b id="dt-dur">—</b></div>
+<div class="field"><span>いびき検出</span><b id="dt-snore">—</b></div>
+<div class="field"><span>寝言・話し声として除外</span><b id="dt-speech">—</b></div>
+<div class="field"><span>環境音の変化</span><b id="dt-env">—</b></div>
+<div class="field"><span>いびきの平均の大きさ</span><b id="dt-avg">—</b></div>
+<div class="field"><span>いびきの最大の大きさ</span><b id="dt-max">—</b></div>
+<div class="field"><span>体動</span><b id="dt-motion">—</b></div>
+<div class="field"><span>音声データの量</span><b id="dt-size">—</b></div>
+<div class="graph-box"></div>
+<div class="tagrow">
+<span class="tag">いびき 0</span>
+<span class="tag">判定不能 0</span>
+<span class="tag">環境音 0</span>
+<span class="tag">人声 0</span>
+<span class="tag">体動 0</span>
+</div>
+<span class="muted">体動の表示設定</span>
+<input id="slider-motion" type="range" min="0" max="100" value="50">
+<span class="muted">音声の表示設定</span>
+<input id="slider-sound" type="range" min="0" max="100" value="50">
+<button id="btn-listen" class="primary" type="button">タイムラインの音を聴く</button>
+<button id="btn-listen-ref" class="primary" type="button">基準の「あ〜」を聴く</button>
+<button id="btn-to-share" type="button">共有画面に移行する</button>
+<button id="btn-delete-rec" class="danger" type="button">この記録を削除する</button>
+</section>
+<p class="muted">本アプリは診断を行うものではありません。医師の判断の参考資料とします。</p>
+<button id="btn-review-back" class="sub" type="button">記録画面に戻る</button>
+</main>
+
+<!-- 9ページ　共有 -->
+<main id="page-share" class="page" hidden>
+<h1>睡眠記録の共有</h1>
+<p id="sh-msg" class="err" hidden></p>
+<button id="sh-all" class="primary" type="button">全てのいびき記録を保存</button>
+<div class="card">
+<h2>共有先確認（宛先）</h2>
+<div class="field"><span>共有先アドレス</span><b id="sh-addr">—</b></div>
+<button id="sh-copy" type="button">①アドレスをコピー</button>
+<button id="sh-pick" type="button">②ファイルを選んで送信</button>
+<input id="sh-file" type="file" accept=".zip,application/zip" hidden>
+</div>
+<section id="sh-del-card" class="card">
+<h2>保存済の音声データの削除</h2>
+<p class="muted">ZIPを保存できたことを確認してからを押し、次にを押してください。簡易ログとグラフは残ります。元に戻せません。</p>
+<button id="sh-saved-ok" type="button" disabled>ZIPを保存できた</button>
+<button id="sh-del" class="danger" type="button" disabled>このタイムラインから音声を削除</button>
+</section>
+<button id="sh-back" class="sub" type="button">記録画面に戻る</button>
+</main>
+
+<!-- 共有の確認（機械で判断しきれなかった音を、ユーザーが1件ずつ選ぶ） -->
+<div id="pick-dialog" class="modal" hidden>
+<div class="modal-box">
+<h2>共有の確認</h2>
+<p>次の音は、機械では判断しきれなかったものです。聴いて、共有するかどうかを1件ずつ選んでください。選ばなかった音はZIPに入りません。人声と判断された小さい音は、ZIPに入りません。</p>
+<div id="pick-list"></div>
+<audio id="pick-audio" controls hidden></audio>
+<button id="pick-go" class="primary" type="button">この内容で保存する</button>
+<button id="pick-close" class="sub" type="button">閉じる</button>
+</div>
+</div>
+
+<script>
+"use strict";
+const APP_VERSION = "モックアップv1";
+const $ = (id) => document.getElementById(id);
+
+/* ===== 保存（患者情報と設定だけを端末にしまう） ===== */
+const DB = {
+  db: null,
+  open() {
+    if (DB.db) return Promise.resolve(DB.db);
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("SomnoLogDB", 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore("kv"); };
+      r.onsuccess = () => { DB.db = r.result; res(DB.db); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  async get(key) {
+    const d = await DB.open();
+    return new Promise((res, rej) => {
+      const q = d.transaction("kv").objectStore("kv").get(key);
+      q.onsuccess = () => res(q.result === undefined ? null : q.result);
+      q.onerror = () => rej(q.error);
+    });
+  },
+  async put(key, val) {
+    const d = await DB.open();
+    return new Promise((res, rej) => {
+      const t = d.transaction("kv", "readwrite");
+      t.objectStore("kv").put(val, key);
+      t.oncomplete = () => res();
+      t.onerror = () => rej(t.error);
+    });
+  }
+};
+
+/* ===== 状態 ===== */
+const S = {
+  patient: null,        // 登録済みの患者情報
+  pending: null,        // 確認待ちの患者情報
+  perms: false,         // 許可を取ったか
+  refDone: false,       // 基準音を録ったか
+  recording: false,
+  scanStream: null,
+  scanTimer: null
+};
+
+const PAGES = ["perm", "home", "scan", "mail", "confirm", "setup1", "setup2", "record", "review", "share"];
+function showPage(name) {
+  for (const p of PAGES) $("page-" + p).hidden = p !== name;
+  if (name !== "scan") stopScan();
+  window.scrollTo(0, 0);
+}
+
+function msg(id, text) {
+  const el = $(id);
+  el.textContent = text || "";
+  el.hidden = !text;
+}
+
+/* ===== 患者情報の受け取り（リンク／二次元コード／メモ帳） ===== */
+function parsePayload(text) {
+  if (!text) return null;
+  try {
+    const o = JSON.parse(text);
+    if (o && typeof o === "object" && (o.clinicName || o.patientName || o.serial)) return o;
+  } catch (e) { /* JSONでなければ次を試す */ }
+  const m = String(text).match(/slp=([A-Za-z0-9\-_]+)/);
+  if (m) {
+    try {
+      const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      const bin = atob(b64 + "=".repeat((4 - b64.length % 4) % 4));
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      const o = JSON.parse(new TextDecoder().decode(bytes));
+      if (o && typeof o === "object") return o;
+    } catch (e) { /* 解釈できなければ null */ }
+  }
+  return null;
+}
+
+function parseMemoText(text) {
+  const direct = parsePayload(text);
+  if (direct) return direct;
+  const o = {};
+  const map = { "診療所名": "clinicName", "登録番号2": "chartNo", "表示名": "patientName", "登録番号1": "serial", "ログ共有通知先": "logShareEmail", "宛先": "logShareEmail" };
+  for (const line of String(text).split(/\r?\n/)) {
+    const i = line.indexOf("：");
+    const j = line.indexOf(":");
+    const k = i >= 0 ? i : j;
+    if (k < 0) continue;
+    const key = map[line.slice(0, k).trim()];
+    if (key) o[key] = line.slice(k + 1).trim();
+  }
+  return o.clinicName || o.patientName || o.serial ? o : null;
+}
+
+function toConfirm(patient) {
+  S.pending = patient;
+  $("cf-clinic").textContent = patient.clinicName || "—";
+  $("cf-chart").textContent = patient.chartNo || "—";
+  $("cf-name").textContent = patient.patientName || "—";
+  $("cf-serial").textContent = patient.serial || "—";
+  $("cf-mail").textContent = patient.logShareEmail || "—";
+  showPage("confirm");
+}
+
+/* ===== 1ページ　許可（モーション要求を最初に同期的に出す） ===== */
+$("btn-perm").addEventListener("click", () => {
+  msg("perm-msg", "");
+  let motionP = null;
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    try { motionP = DeviceOrientationEvent.requestPermission(); } catch (e) { motionP = null; }
+  }
+  const camP = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    ? navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+    : Promise.reject(new Error("no media"));
+  Promise.all([Promise.resolve(motionP).catch(() => "denied"), camP])
+    .then(([, stream]) => {
+      stream.getTracks().forEach((t) => t.stop());
+      S.perms = true;
+      return DB.put("setup", { perms: true, refDone: S.refDone });
+    })
+    .then(() => showPage("home"))
+    .catch(() => msg("perm-msg", "許可が取れませんでした。ブラウザの設定を確認してください。"));
+});
+
+/* ===== 2ページ　入口 ===== */
+$("btn-to-scan").addEventListener("click", () => { showPage("scan"); startScan(); });
+$("btn-to-mail").addEventListener("click", () => showPage("mail"));
+$("btn-start").addEventListener("click", () => {
+  if (!S.patient) { msg("home-msg", "患者情報が登録されていません。②か③で登録してください。"); return; }
+  msg("home-msg", "");
+  showPage(S.refDone ? "record" : "setup1");
+});
+$("btn-update").addEventListener("click", () => {
+  location.href = location.pathname + "?v=" + Date.now() + location.hash;
+});
+
+/* ===== 3ページ　二次元コードを読む ===== */
+async function startScan() {
+  msg("scan-msg", "");
+  if (!("BarcodeDetector" in window)) {
+    msg("scan-msg", "この端末ではアプリの中で読めません。スマートフォンのカメラで二次元コードを読んでください。");
+    return;
+  }
+  try {
+    S.scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    $("scan-video").srcObject = S.scanStream;
+    await $("scan-video").play();
+    const det = new BarcodeDetector({ formats: ["qr_code"] });
+    const tick = async () => {
+      if (!S.scanStream) return;
+      try {
+        const codes = await det.detect($("scan-video"));
+        if (codes && codes.length) {
+          const p = parsePayload(codes[0].rawValue || "");
+          if (p) { stopScan(); toConfirm(p); return; }
+        }
+      } catch (e) { /* 読み取りは続ける */ }
+      S.scanTimer = setTimeout(tick, 300);
+    };
+    tick();
+  } catch (e) {
+    msg("scan-msg", "カメラを開けませんでした。");
+  }
+}
+function stopScan() {
+  if (S.scanTimer) { clearTimeout(S.scanTimer); S.scanTimer = null; }
+  if (S.scanStream) { S.scanStream.getTracks().forEach((t) => t.stop()); S.scanStream = null; }
+}
+$("btn-scan-back").addEventListener("click", () => showPage("home"));
+
+/* ===== 4ページ　メールの情報を読み込む ===== */
+$("btn-import").addEventListener("click", () => $("file-import").click());
+$("file-import").addEventListener("change", async () => {
+  const f = $("file-import").files[0];
+  $("file-import").value = "";
+  if (!f) return;
+  msg("mail-msg", "");
+  const p = parseMemoText(await f.text());
+  if (p) toConfirm(p);
+  else msg("mail-msg", "患者情報を読み取れませんでした。ファイルを確認してください。");
+});
+$("btn-mail-back").addEventListener("click", () => showPage("home"));
+
+/* ===== 5ページ　情報の確認 ===== */
+$("btn-ok").addEventListener("click", async () => {
+  if (!S.pending) return;
+  S.patient = S.pending;
+  S.pending = null;
+  await DB.put("patient", S.patient);
+  showPage(S.refDone ? "record" : "setup1");
+});
+$("btn-ng").addEventListener("click", () => {
+  S.pending = null;
+  showPage("perm");
+});
+
+/* ===== セッティング①（仮置き） ===== */
+$("btn-setup1-next").addEventListener("click", () => showPage("setup2"));
+
+/* ===== 6ページ　セッティング②（基準音） ===== */
+$("btn-ref-rec").addEventListener("click", () => {
+  $("ref-dialog").hidden = false;
+  setTimeout(async () => {
+    $("ref-dialog").hidden = true;
+    S.refDone = true;
+    $("btn-ref-play").disabled = false;
+    await DB.put("setup", { perms: S.perms, refDone: true });
+  }, 2500);
+});
+$("btn-ref-play").addEventListener("click", () => {
+  msg("ref-msg", "基準音はまだ入っていません。");
+});
+$("btn-setup-done").addEventListener("click", () => {
+  if (!S.refDone) { msg("setup2-msg", "基準音を録ってください。"); return; }
+  msg("setup2-msg", "");
+  showPage("record");
+});
+
+/* ===== 7ページ　記録 ===== */
+function longPress(el, ms, fn) {
+  let t = null;
+  el.addEventListener("pointerdown", () => { t = setTimeout(fn, ms); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
+    el.addEventListener(ev, () => { if (t) { clearTimeout(t); t = null; } });
+  }
+}
+function setRecUI() {
+  $("btn-rec-start").hidden = S.recording;
+  $("btn-rec-black").hidden = !S.recording;
+  $("btn-rec-stop").hidden = !S.recording;
+}
+$("btn-rec-start").addEventListener("click", () => { S.recording = true; setRecUI(); });
+longPress($("btn-rec-stop"), 2000, () => { S.recording = false; setRecUI(); });
+$("btn-rec-black").addEventListener("click", () => {
+  $("black-screen").hidden = false;
+});
+longPress($("black-screen"), 2000, () => { $("black-screen").hidden = true; });
+setInterval(() => {
+  if (!$("black-screen").hidden) {
+    const d = new Date();
+    $("black-clock").textContent = d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+}, 1000);
+$("btn-to-calendar").addEventListener("click", () => showPage("review"));
+
+/* ===== 8ページ　見返す ===== */
+(function buildCalendar() {
+  const grid = $("cal-grid");
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  for (let i = 0; i < first.getDay(); i++) grid.appendChild(document.createElement("div"));
+  for (let d = 1; d <= days; d++) {
+    const cell = document.createElement("div");
+    cell.textContent = d;
+    grid.appendChild(cell);
+  }
+})();
+$("btn-to-share").addEventListener("click", () => {
+  $("sh-addr").textContent = (S.patient && S.patient.logShareEmail) || "—";
+  showPage("share");
+});
+$("btn-review-back").addEventListener("click", () => showPage("record"));
+
+/* ===== 9ページ　共有 ===== */
+$("sh-copy").addEventListener("click", async () => {
+  const a = (S.patient && S.patient.logShareEmail) || "";
+  if (!a) { msg("sh-msg", "宛先が登録されていません。"); return; }
+  try { await navigator.clipboard.writeText(a); msg("sh-msg", ""); }
+  catch (e) { msg("sh-msg", "コピーできませんでした。宛先：" + a); }
+});
+$("sh-pick").addEventListener("click", () => $("sh-file").click());
+$("sh-saved-ok").addEventListener("click", () => {
+  $("sh-saved-ok").disabled = true;
+  $("sh-saved-ok").textContent = "ZIPを保存できた（確認済み）";
+  $("sh-del").disabled = false;
+});
+$("pick-close").addEventListener("click", () => { $("pick-dialog").hidden = true; });
+$("sh-back").addEventListener("click", () => showPage("record"));
+
+/* ===== 起動：保存された情報を読み、済んだ所は飛ばす ===== */
+(async function boot() {
+  try {
+    const setup = await DB.get("setup");
+    if (setup) { S.perms = !!setup.perms; S.refDone = !!setup.refDone; }
+    S.patient = await DB.get("patient");
+  } catch (e) { console.warn(e); }
+  if (S.refDone) $("btn-ref-play").disabled = false;
+  const fromLink = parsePayload(location.hash || "");
+  if (fromLink) { toConfirm(fromLink); return; }
+  if (!S.perms) showPage("perm");
+  else if (!S.patient) showPage("home");
+  else if (!S.refDone) showPage("setup1");
+  else showPage("record");
+})();
+</script>
+</body>
+</html>
