@@ -7,17 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V10</title>
+<title>③ST-mock-up_V11</title>
 
 <script>
-/*
- * 保存された新しい版を起動前に適用する。
- * ?normal=1 を付けた場合は保存版を使わず、公開HTMLで起動する。
- */
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 10;
+  const EMBEDDED_VERSION = 11;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -107,7 +103,10 @@ input[type=range]{width:100%}
 video{width:100%;border-radius:12px;background:#000}
 .scan-frame{border:2px solid #4a90d9;border-radius:12px;height:120px;display:flex;align-items:center;justify-content:center;color:#9aa5b1}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.cal div{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid #232d38;border-radius:8px;color:#9aa5b1;font-size:13px}
+.cal div{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #232d38;border-radius:8px;color:#9aa5b1;font-size:13px;position:relative}
+.cal div.has-rec{border-color:#2563eb;color:#e8eef4;background:#162235;cursor:pointer;font-weight:600}
+.cal div.has-rec::after{content:"";width:6px;height:6px;border-radius:50%;background:#4a90d9;margin-top:2px}
+.cal div.selected{outline:2px solid #60a5fa}
 .graph-box{height:180px;border:1px solid #232d38;border-radius:12px;background:#0e1319}
 .tagrow{display:flex;gap:8px;flex-wrap:wrap}
 .tag{font-size:13px;border:1px solid #2a3643;border-radius:999px;padding:4px 10px;color:#c7d0da}
@@ -131,7 +130,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V10</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V11</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -314,11 +313,10 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 10;
-const APP_VERSION = "③ST-mock-up_V10";
+const APP_VERSION_NUMBER = 11;
+const APP_VERSION = "③ST-mock-up_V11";
 const $ = (id) => document.getElementById(id);
 
-/* 検知の定数は手順書の現行値を一か所に置く */
 const RECORDING_CONFIG = Object.freeze({
   sampleRate: 16000,
   calibrationSeconds: 300,
@@ -335,7 +333,7 @@ const RECORDING_CONFIG = Object.freeze({
 
 const REQUIRED_STORES = ["appkv", "sessions", "secs", "events", "clips"];
 
-/* ===== 保存（DB）：版番号は指定せず、既存の版に合わせて開く ===== */
+/* ===== 保存（DB） ===== */
 const DB = {
   name: "SomnoLogMockup",
   db: null,
@@ -451,17 +449,42 @@ const DB = {
     });
   },
 
+  getAll(storeName) {
+    return DB.run(storeName, "readonly", (tx, setResult) => {
+      const request = tx.objectStore(storeName).getAll();
+      request.onsuccess = () => setResult(request.result || []);
+    });
+  },
+
+  getByIndex(storeName, indexName, key) {
+    return DB.run(storeName, "readonly", (tx, setResult) => {
+      const request = tx.objectStore(storeName).index(indexName).getAll(key);
+      request.onsuccess = () => setResult(request.result || []);
+    });
+  },
+
+  deleteSession(sessionId) {
+    return DB.run(["sessions", "secs", "events", "clips"], "readwrite", (tx) => {
+      tx.objectStore("sessions").delete(sessionId);
+
+      for (const name of ["secs", "events", "clips"]) {
+        const store = tx.objectStore(name);
+        const req = store.index("bySession").openKeyCursor(IDBKeyRange.only(sessionId));
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            store.delete(cursor.primaryKey);
+            cursor.continue();
+          }
+        };
+      }
+    });
+  },
+
   getLegacyKv(key) {
     return DB.run("kv", "readonly", (tx, setResult) => {
       const request = tx.objectStore("kv").get(key);
       request.onsuccess = () => setResult(request.result === undefined ? null : request.result);
-    });
-  },
-
-  count(storeName) {
-    return DB.run(storeName, "readonly", (tx, setResult) => {
-      const request = tx.objectStore(storeName).count();
-      request.onsuccess = () => setResult(request.result);
     });
   },
 
@@ -532,7 +555,6 @@ function openDatabase(version) {
   });
 }
 
-/* 既存のストアは変更せず、不足分だけ作る */
 function migrate(database, transaction) {
   if (!database.objectStoreNames.contains("kv")) {
     database.createObjectStore("kv");
@@ -589,7 +611,8 @@ const S = {
   registering: false,
   lastError: null,
   bootPromise: null,
-  schema: null
+  schema: null,
+  selectedSessionId: null
 };
 
 const PAGES = [
@@ -611,6 +634,7 @@ function showPage(name) {
   if (name !== "scan") stopScan();
   if (name === "setup1") updateNextButton();
   if (name === "setup2" || name === "record") startMeterQuietly(name);
+  if (name === "review") refreshCalendar();
   window.scrollTo(0, 0);
 }
 
@@ -634,7 +658,6 @@ function describeError(context, error) {
   return lines.join("\n");
 }
 
-/* ===== 設定の保存（appkv） ===== */
 function saveSetup(patch) {
   const task = S.setupQueue.then(async () => {
     const next = { ...S.setup, ...patch, updatedAt: Date.now() };
@@ -647,7 +670,6 @@ function saveSetup(patch) {
   return task;
 }
 
-/* ===== 患者情報 ===== */
 function isPatientObject(object) {
   return !!(
     object &&
@@ -709,7 +731,6 @@ const METER = {
   motionTimer: null
 };
 
-/* 基準音の録音の設定 */
 const REF = {
   busy: false,
   url: null
@@ -737,7 +758,6 @@ function mediaErrorText(label, error) {
   return label + "\n" + name + "\n" + detail + (hints[name] ? "\n" + hints[name] : "");
 }
 
-/* マイク：エコー除去・ノイズ抑制・自動ゲインは全てオフ */
 async function startMic() {
   if (METER.stream) return;
 
@@ -771,7 +791,6 @@ async function startMic() {
   }
 }
 
-/* モーション：重力を除いた動きの大きさ */
 function onMotion(event) {
   const a = event.acceleration;
   const g = event.accelerationIncludingGravity;
@@ -872,7 +891,6 @@ function updateNextButton() {
   $("btn-setup1-next").disabled = !METER.micOk;
 }
 
-/* 画面を開いた時、許可済みなら黙って計測を再開する。許可は求めない。 */
 async function startMeterQuietly(page) {
   const target = page === "record" ? "record-meter-msg" : "setup2-meter-msg";
 
@@ -889,7 +907,6 @@ async function startMeterQuietly(page) {
   }
 }
 
-/* ===== 基準音の録音：静かな所2秒 → 「あ〜」2秒。区間最大で測り、calDbを計算する ===== */
 async function recordReference() {
   if (!METER.stream || !METER.analyser) {
     throw makeError("MicNotReady", "マイクが許可されていません。セッティング①で「マイクとモーションセンサーを許可」を押してください。");
@@ -911,7 +928,6 @@ async function recordReference() {
 
   const buffer = new Float32Array(METER.analyser.fftSize);
 
-  /* 1. 静かな所2秒を測る */
   $("ref-dialog-title").textContent = "静かにしてお待ちください";
   $("ref-dialog-body").textContent = "周りの音の大きさを測っています（2秒）。";
 
@@ -929,7 +945,6 @@ async function recordReference() {
   }
   const quietDb = quietSum / Math.max(quietCount, 1);
 
-  /* 2. 「あ〜」2秒を測り、音も保存する（スライダーは焼き付けない） */
   $("ref-dialog-title").textContent = "「あ〜」と声を出してください";
   $("ref-dialog-body").textContent = "スマートフォンを顔から少し離して。";
 
@@ -996,7 +1011,7 @@ function setSetup2Busy(busy) {
 }
 
 /* =========================================================
- * 段階3：録音エンジン（WebAudio 16000Hz・毎秒数値ログ・体動・無音再生・Wake Lock）
+ * 段階3：録音エンジン
  * ========================================================= */
 const REC = {
   sessionId: null,
@@ -1087,7 +1102,6 @@ const REC = {
     source.connect(processor);
     processor.connect(ctx.destination);
 
-    /* 黒画面中の停止を防ぐ：無音ループ再生 ＋ Wake Lock */
     REC.startKeepAlive();
     if ("wakeLock" in navigator) {
       try {
@@ -1261,7 +1275,7 @@ $("btn-perm").addEventListener("click", () => {
     });
 });
 
-/* ===== セッティング①：マイクとモーションの許可 ===== */
+/* ===== セッティング① ===== */
 $("btn-mic-perm").addEventListener("click", () => {
   if (METER.busy) return;
   METER.busy = true;
@@ -1388,9 +1402,7 @@ async function startScan() {
             return;
           }
         }
-      } catch (ignored) {
-        // 読み取りを続ける。
-      }
+      } catch (ignored) {}
 
       if (generation === S.scanGeneration && S.scanStream && !$("page-scan").hidden) {
         S.scanTimer = setTimeout(tick, 300);
@@ -1423,16 +1435,13 @@ function stopScan() {
 
 $("btn-scan-back").addEventListener("click", () => showPage("home"));
 
-/* ===== 患者情報の受け取り ===== */
 function parsePayload(text) {
   if (!text) return null;
 
   try {
     const object = JSON.parse(String(text));
     if (isPatientObject(object)) return object;
-  } catch (ignored) {
-    // 次の形式を試す。
-  }
+  } catch (ignored) {}
 
   const match = String(text).match(/slp=([A-Za-z0-9\-_]+)/);
   if (!match) return null;
@@ -1486,7 +1495,6 @@ function toConfirm(patient) {
   showPage("confirm");
 }
 
-/* ===== 4ページ　メール ===== */
 $("btn-import").addEventListener("click", () => $("file-import").click());
 
 $("file-import").addEventListener("change", async () => {
@@ -1508,7 +1516,6 @@ $("file-import").addEventListener("change", async () => {
 
 $("btn-mail-back").addEventListener("click", () => showPage("home"));
 
-/* ===== 5ページ　患者情報の保存 ===== */
 $("btn-ok").addEventListener("click", async () => {
   if (!S.pending || S.registering) return;
 
@@ -1551,7 +1558,6 @@ $("btn-ng").addEventListener("click", () => {
   showPage("perm");
 });
 
-/* ===== セッティング②：基準音を録る ===== */
 $("btn-ref-rec").addEventListener("click", async () => {
   if (REF.busy) return;
 
@@ -1599,7 +1605,6 @@ $("btn-ref-rec").addEventListener("click", async () => {
   }
 });
 
-/* ===== セッティング②：基準音を聞く ===== */
 $("btn-ref-play").addEventListener("click", async () => {
   try {
     const saved = await DB.getApp("referenceAudio");
@@ -1641,7 +1646,6 @@ $("btn-setup-done").addEventListener("click", () => {
   showPage("record");
 });
 
-/* ===== 長押し ===== */
 function longPress(element, milliseconds, callback) {
   let timer = null;
   let pointerId = null;
@@ -1680,7 +1684,6 @@ function longPress(element, milliseconds, callback) {
   });
 }
 
-/* ===== 黒画面の完全黒色化（白帯対策） ===== */
 function enterBlackScreen() {
   refreshBlackClock();
   document.documentElement.style.setProperty("background-color", "#000000", "important");
@@ -1706,7 +1709,6 @@ function exitBlackScreen() {
   }
 }
 
-/* ===== 記録 ===== */
 function setRecUI() {
   $("btn-rec-start").hidden = S.recording;
   $("btn-rec-black").hidden = !S.recording;
@@ -1744,23 +1746,125 @@ setInterval(() => {
 
 $("btn-to-calendar").addEventListener("click", () => showPage("review"));
 
-/* ===== 見返す：枠のみ ===== */
-(function buildCalendar() {
+/* ===== 見返す：カレンダー反映と詳細表示 ===== */
+function formatTime(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " +
+    String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+function formatDuration(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return h + "時間" + m + "分" + s + "秒";
+  if (m > 0) return m + "分" + s + "秒";
+  return s + "秒";
+}
+
+async function refreshCalendar() {
   const grid = $("cal-grid");
+  grid.innerHTML = "";
+  $("detail-box").hidden = true;
+  S.selectedSessionId = null;
+
   const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const first = new Date(year, month, 1);
+  const days = new Date(year, month + 1, 0).getDate();
+
+  let sessions = [];
+  try {
+    sessions = await DB.getAll("sessions");
+  } catch (error) {
+    $("review-msg").textContent = "記録の読み込みに失敗しました。";
+    return;
+  }
+
+  const byDay = new Map();
+  for (const s of sessions) {
+    if (!s || !s.startedAt) continue;
+    const d = new Date(s.startedAt);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const day = d.getDate();
+      const prev = byDay.get(day);
+      if (!prev || s.startedAt > prev.startedAt) {
+        byDay.set(day, s);
+      }
+    }
+  }
 
   for (let i = 0; i < first.getDay(); i++) {
     grid.appendChild(document.createElement("div"));
   }
 
+  let latestSession = null;
   for (let day = 1; day <= days; day++) {
     const cell = document.createElement("div");
     cell.textContent = day;
+    const session = byDay.get(day);
+    if (session) {
+      cell.className = "has-rec";
+      cell.addEventListener("click", () => selectSession(session, cell));
+      if (!latestSession || session.startedAt > latestSession.startedAt) {
+        latestSession = { session, cell };
+      }
+    }
     grid.appendChild(cell);
   }
-})();
+
+  if (sessions.length === 0) {
+    $("review-msg").textContent = "記録はまだありません。";
+  } else {
+    $("review-msg").textContent = "印のある日付をタップすると記録を表示します（全" + sessions.length + "件）。";
+    if (latestSession) {
+      selectSession(latestSession.session, latestSession.cell);
+    }
+  }
+}
+
+async function selectSession(session, cell) {
+  for (const el of $("cal-grid").children) el.classList.remove("selected");
+  if (cell) cell.classList.add("selected");
+
+  S.selectedSessionId = session.id;
+  $("detail-box").hidden = false;
+
+  $("dt-start").textContent = formatTime(session.startedAt);
+  const durMs = session.endedAt ? session.endedAt - session.startedAt : 0;
+  $("dt-dur").textContent = session.endedAt ? formatDuration(durMs) : "記録中または未完了";
+
+  let secs = [];
+  try {
+    secs = await DB.getByIndex("secs", "bySession", session.id);
+  } catch (ignored) {}
+
+  let maxMotion = 0;
+  let hasMotion = false;
+  let okCount = 0;
+  for (const row of secs) {
+    if (row.status === "ok") okCount += 1;
+    if (row.motion !== null && row.motion !== undefined) {
+      hasMotion = true;
+      if (row.motion > maxMotion) maxMotion = row.motion;
+    }
+  }
+
+  $("dt-motion").textContent = hasMotion ? "最大 " + maxMotion.toFixed(3) + " g" : "未計測";
+  $("dt-size").textContent = secs.length + "秒ログ（正常 " + okCount + "秒）";
+}
+
+$("btn-delete-rec").addEventListener("click", async () => {
+  if (!S.selectedSessionId) return;
+  try {
+    await DB.deleteSession(S.selectedSessionId);
+    await refreshCalendar();
+  } catch (error) {
+    $("review-msg").textContent = "削除に失敗しました。";
+  }
+});
 
 $("btn-to-share").addEventListener("click", () => {
   $("sh-addr").textContent = (S.patient && S.patient.logShareEmail) || "—";
@@ -1769,15 +1873,13 @@ $("btn-to-share").addEventListener("click", () => {
 
 $("btn-review-back").addEventListener("click", () => showPage("record"));
 
-/* ===== 共有：枠のみ ===== */
+/* ===== 共有 ===== */
 $("sh-copy").addEventListener("click", async () => {
   const address = (S.patient && S.patient.logShareEmail) || "";
-
   if (!address) {
     msg("sh-msg", "宛先が登録されていません。");
     return;
   }
-
   try {
     await navigator.clipboard.writeText(address);
     msg("sh-msg", "");
@@ -1790,7 +1892,6 @@ $("sh-pick").addEventListener("click", () => $("sh-file").click());
 
 $("sh-saved-ok").addEventListener("click", () => {
   if ($("sh-saved-ok").disabled) return;
-
   $("sh-saved-ok").disabled = true;
   $("sh-saved-ok").textContent = "ZIPを保存できた（確認済み）";
   $("sh-del").disabled = false;
@@ -1803,7 +1904,6 @@ $("pick-close").addEventListener("click", () => {
 
 $("sh-back").addEventListener("click", () => showPage("record"));
 
-/* ===== 開発時の確認用 ===== */
 window.SomnoLogMockupDiagnostics = Object.freeze({
   version: APP_VERSION,
   inspectDatabase: () => DB.inspect(),
@@ -1817,7 +1917,7 @@ window.SomnoLogMockupDiagnostics = Object.freeze({
   appliedCommit: () => window.__SOMNO_MOCKUP_APPLIED_COMMIT__ || null
 });
 
-/* ===== 更新：ST-mock-upの最新コミットから取得 ===== */
+/* ===== 更新 ===== */
 const UPDATE_CONFIG = Object.freeze({
   owner: "matsuodentalassociation",
   repository: "ST-mock-up",
@@ -1994,7 +2094,6 @@ async function boot() {
     if (!startupError) startupError = error;
   }
 
-  /* 基準音の音声が実際に保存されている時だけ「基準音済み」とみなす */
   try {
     const reference = await DB.getApp("referenceAudio");
     S.refDone = !!(reference && reference.blob && reference.blob.size > 0);
