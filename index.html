@@ -6,37 +6,41 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V3 </title>
+<title>③ST-mock-up_V4</title>
 
 <script>
 /*
- * 端末に保存した新しいHTMLを、アプリ本体の起動前に適用する。
- * ?normal=1 は保存版を使わず、通常の公開ファイルで起動する逃げ道。
- * 患者情報・録音データは、この更新用localStorageには保存しない。
+ * 保存された新しい版を起動前に適用する。
+ * ?normal=1 を付けて開いた場合は、保存版を適用しない。
+ * アプリのHTML以外のデータをこの保存領域に入れない。
  */
-(function applySavedApp() {
+(function () {
   "use strict";
-  const EMBEDDED_VERSION = 3;
-  const KEY = "SomnoLogMockup.appPackage.v1";
-  const params = new URLSearchParams(location.search);
 
-  if (params.get("normal") === "1" || window.__SOMNO_MOCKUP_APPLIED__) return;
+  const EMBEDDED_VERSION = 4;
+  const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
+
+  if (window.__SOMNO_MOCKUP_APPLIED__) return;
 
   try {
-    const raw = localStorage.getItem(KEY);
+    const params = new URLSearchParams(location.search);
+    if (params.get("normal") === "1") return;
+
+    const raw = localStorage.getItem(PACKAGE_KEY);
     if (!raw) return;
+
     const pkg = JSON.parse(raw);
 
     if (
       !pkg ||
       pkg.appId !== "SomnoLogMockup" ||
       pkg.repository !== "matsuodentalassociation/ST-mock-up" ||
-      !Number.isInteger(pkg.version) ||
+      !Number.isSafeInteger(pkg.version) ||
       pkg.version <= EMBEDDED_VERSION ||
       typeof pkg.html !== "string" ||
       !/^[a-f0-9]{40}$/i.test(pkg.commit || "") ||
       !pkg.html.includes('const APP_ID = "SomnoLogMockup";') ||
-      !pkg.html.includes('const APP_VERSION_NUMBER = ' + pkg.version + ';') ||
+      !pkg.html.includes("const APP_VERSION_NUMBER = " + pkg.version + ";") ||
       !/<\/html\s*>/i.test(pkg.html)
     ) {
       return;
@@ -47,8 +51,8 @@
     document.open();
     document.write(pkg.html);
     document.close();
-  } catch (e) {
-    console.warn("保存版を適用できないため、公開ファイルで起動します。", e);
+  } catch (error) {
+    console.warn("保存版を起動できないため公開HTMLで起動します。", error);
   }
 })();
 </script>
@@ -64,7 +68,7 @@ h1{font-size:20px;margin:4px 0}
 h2{font-size:16px;margin:4px 0}
 p{margin:4px 0;line-height:1.6}
 .muted{color:#9aa5b1;font-size:13px}
-.err{color:#ff8a80;font-size:14px}
+.err{color:#ff8a80;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
 .card{background:#12181f;border:1px solid #232d38;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
 button{font:inherit;font-size:16px;padding:12px;border-radius:10px;border:1px solid #2a3643;background:#1b242e;color:#e8eef4;cursor:pointer;width:100%}
 button.primary{padding:16px;font-size:17px;background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}
@@ -73,20 +77,21 @@ button.danger{background:#5b1d1d;border-color:#7a2a2a;color:#ffb4ab}
 button:disabled{opacity:.45;cursor:default}
 .field{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #232d38;padding:8px 0}
 .field span{color:#9aa5b1}
-.field b{font-weight:600;text-align:right}
+.field b{font-weight:600;text-align:right;overflow-wrap:anywhere}
 .bar{height:14px;background:#1b242e;border:1px solid #2a3643;border-radius:7px;overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:#4a90d9}
 input[type=range]{width:100%}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
-.modal-box{background:#161d26;border:1px solid #2a3643;border-radius:12px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px}
+.modal-box{background:#161d26;border:1px solid #2a3643;border-radius:12px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
 .pick-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #2a3643;padding:6px 0}
-#black-screen{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+#black-screen{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;touch-action:none;user-select:none;-webkit-user-select:none}
 #black-clock{font-size:34px;color:#3d4753}
+#btn-rec-stop{touch-action:none;user-select:none;-webkit-user-select:none}
 video{width:100%;border-radius:12px;background:#000}
 .scan-frame{border:2px solid #4a90d9;border-radius:12px;height:120px;display:flex;align-items:center;justify-content:center;color:#9aa5b1}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cal div{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid #232d38;border-radius:8px;color:#9aa5b1;font-size:13px}
-.cal.mark{color:#fff;border-color:#4a90d9}
+.cal div.mark{color:#fff;border-color:#4a90d9}
 .graph-box{height:180px;border:1px solid #232d38;border-radius:12px;background:#0e1319}
 .tagrow{display:flex;gap:8px;flex-wrap:wrap}
 .tag{font-size:13px;border:1px solid #2a3643;border-radius:999px;padding:4px 10px;color:#c7d0da}
@@ -110,7 +115,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">モックアップv3</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V4</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -150,7 +155,7 @@ audio{width:100%}
 <button id="btn-ng" type="button">⑦ 情報が間違っている（1ページに戻る）</button>
 </main>
 
-<!-- セッティング①　動作の確認（元の仮置きを維持） -->
+<!-- セッティング① -->
 <main id="page-setup1" class="page" hidden>
 <h1>セッティング①</h1>
 <div class="card">
@@ -162,7 +167,7 @@ audio{width:100%}
 <button id="btn-setup1-next" class="primary" type="button">次へ</button>
 </main>
 
-<!-- 6ページ　セッティング②（基準音） -->
+<!-- 6ページ　セッティング② -->
 <main id="page-setup2" class="page" hidden>
 <h1>セッティング②</h1>
 <div class="card">
@@ -191,7 +196,7 @@ audio{width:100%}
 </div>
 </div>
 
-<!-- 7ページ　記録する -->
+<!-- 7ページ　記録 -->
 <main id="page-record" class="page" hidden>
 <h1>記録</h1>
 <div class="card">
@@ -212,7 +217,7 @@ audio{width:100%}
 <span class="muted">2秒以上長押しで戻る</span>
 </div>
 
-<!-- 8ページ　見返す（カレンダーと詳細） -->
+<!-- 8ページ　見返す -->
 <main id="page-review" class="page" hidden>
 <h1>記録カレンダー</h1>
 <div id="cal-grid" class="cal"></div>
@@ -286,14 +291,14 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 3;
-const APP_VERSION = "モックアップv3";
+const APP_VERSION_NUMBER = 4;
+const APP_VERSION = "③ST-mock-up_V4";
 const $ = (id) => document.getElementById(id);
 
 /*
- * 今回は段階1。
- * 検知・WebAudio・人声判定・ZIP生成はまだ接続しない。
- * 未決の検知定数は、手順書の現行値を一か所に置く。
+ * V4は保存の土台の修正。
+ * 基準音・夜間録音・人声判定・共有はまだ実配線していない。
+ * 検知定数は手順書の現行値を維持する。
  */
 const RECORDING_CONFIG = Object.freeze({
   sampleRate: 16000,
@@ -308,58 +313,126 @@ const RECORDING_CONFIG = Object.freeze({
   referenceMinimumDb: -60
 });
 
-/* ===== 保存の土台：SomnoLogMockup 版2 =====
- *
- * kv       : 既存の患者情報・設定をそのまま維持
- * sessions : idを主キーとした晩の記録
- * secs     : [sessionId, sec]を主キーとした毎秒ログ
- * events   : idを主キーとした検出イベント
- * clips    : idを主キーとしたPCM音声
- *
- * 時刻は後段でUNIX時刻ミリ秒を使用する。
- * secs.secは記録開始からの秒番号。
- * 音声の実データは後段でclips.pcmに格納する。
- * IndexedDBはArrayBuffer / TypedArrayを保存できる。
- */
+const S = {
+  patient: null,
+  pending: null,
+  perms: false,
+  refDone: false,
+  recording: false,
+  scanStream: null,
+  scanTimer: null,
+  scanGeneration: 0,
+  setup: {},
+  setupSaveQueue: Promise.resolve(),
+  updating: false,
+  registering: false,
+  dbReady: false,
+  schema: null,
+  lastError: null,
+  bootPromise: null
+};
+
+const PAGES = [
+  "perm", "home", "scan", "mail", "confirm",
+  "setup1", "setup2", "record", "review", "share"
+];
+
+function msg(id, text) {
+  const element = $(id);
+  if (!element) return;
+  element.textContent = text || "";
+  element.hidden = !text;
+}
+
+function showPage(name) {
+  for (const page of PAGES) {
+    $("page-" + page).hidden = page !== name;
+  }
+  if (name !== "scan") stopScan();
+  window.scrollTo(0, 0);
+}
+
+function makeError(name, message) {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+/* ===== DB：既存のデータは消さない ===== */
 const DB = {
   name: "SomnoLogMockup",
   version: 2,
   db: null,
   opening: null,
+  openTimeoutMs: 15000,
   pendingWrites: new Set(),
-
-  /*
-   * 現在の起動中に失敗した「保存試行」を数える。
-   * 音声はsessionIdとclipIdで重複を除いた未保存件数も保持。
-   * 後段で停止確定時にsessionsへ集計を書き込む。
-   * 保存失敗の記録自体をDBへ再帰的に書き込むことはしない。
-   */
-  failures: {
-    writeAttempts: 0,
-    clipWriteAttempts: 0,
-    last: null,
-    byStore: Object.create(null),
-    unsavedClips: new Map()
-  },
+  lastOpenState: "未接続",
+  failureAttempts: 0,
+  failuresByStore: Object.create(null),
+  unsavedClips: new Map(),
+  lastFailure: null,
 
   open() {
     if (DB.db) return Promise.resolve(DB.db);
     if (DB.opening) return DB.opening;
 
-    const opening = new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        reject(new Error("このブラウザでは端末保存を使用できません。"));
+    const promise = new Promise((resolve, reject) => {
+      let request;
+      let finished = false;
+      let blocked = false;
+      let upgradeError = null;
+      let timer = null;
+
+      const fail = (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        DB.lastOpenState = "失敗：" + (error.name || "Error");
+        reject(error);
+      };
+
+      try {
+        if (!window.indexedDB) {
+          throw makeError(
+            "IndexedDBUnavailable",
+            "この環境ではIndexedDBを使用できません。"
+          );
+        }
+
+        DB.lastOpenState = "版2を開いています";
+        request = indexedDB.open(DB.name, DB.version);
+      } catch (error) {
+        fail(error);
         return;
       }
 
-      const request = indexedDB.open(DB.name, DB.version);
-      let upgradeError = null;
+      timer = setTimeout(() => {
+        fail(makeError(
+          blocked ? "DatabaseBlockedError" : "DatabaseOpenTimeout",
+          blocked
+            ? "ほかのタブの接続が残っていて、DBの版更新が待機しています。同じアプリのほかのタブを閉じて再度お試しください。"
+            : "DBを開く処理が15秒以内に完了しませんでした。"
+        ));
+      }, DB.openTimeoutMs);
+
+      request.onblocked = () => {
+        blocked = true;
+        DB.lastOpenState = "ほかのタブの接続待ち";
+        console.warn("SomnoLogMockup：DBの版更新がブロックされています。");
+      };
 
       request.onupgradeneeded = () => {
-        const database = request.result;
-        const transaction = request.transaction;
+        if (finished) {
+          request.transaction.abort();
+          return;
+        }
+
+        DB.lastOpenState = "保存領域を版2へ更新しています";
 
         try {
+          const database = request.result;
+          const transaction = request.transaction;
+
           if (!database.objectStoreNames.contains("kv")) {
             database.createObjectStore("kv");
           }
@@ -372,7 +445,7 @@ const DB = {
             for (const index of indexes) {
               if (!store.indexNames.contains(index.name)) {
                 store.createIndex(index.name, index.keyPath, {
-                  unique: !!index.unique
+                  unique: false
                 });
               }
             }
@@ -388,235 +461,304 @@ const DB = {
 
           ensureStore("events", "id", [
             { name: "bySession", keyPath: "sessionId" },
-            {
-              name: "bySessionStart",
-              keyPath: ["sessionId", "startAt"]
-            }
+            { name: "bySessionStart", keyPath: ["sessionId", "startAt"] }
           ]);
 
           ensureStore("clips", "id", [
             { name: "bySession", keyPath: "sessionId" },
             { name: "byEvent", keyPath: "eventId" },
-            {
-              name: "bySessionStart",
-              keyPath: ["sessionId", "startAt"]
-            }
+            { name: "bySessionStart", keyPath: ["sessionId", "startAt"] }
           ]);
-        } catch (e) {
-          upgradeError = e;
-          transaction.abort();
+        } catch (error) {
+          upgradeError = error;
+          try {
+            request.transaction.abort();
+          } catch (ignored) {
+            fail(error);
+          }
         }
       };
 
-      request.onblocked = () => {
-        const text = "保存領域を更新できません。ほかのタブで開いているこのアプリを閉じてください。";
-        console.warn(text);
-        msg("perm-msg", text);
-        msg("home-msg", text);
-      };
-
       request.onerror = () => {
-        reject(
+        fail(
           upgradeError ||
           request.error ||
-          new Error("保存領域を開けませんでした。")
+          makeError("DatabaseOpenError", "DBを開けませんでした。")
         );
       };
 
       request.onsuccess = () => {
         const database = request.result;
+
+        if (finished) {
+          database.close();
+          return;
+        }
+
+        finished = true;
+        clearTimeout(timer);
         DB.db = database;
+        DB.lastOpenState = "接続済み：版" + database.version;
 
         database.onversionchange = () => {
           database.close();
           if (DB.db === database) DB.db = null;
-          console.warn("別のタブによる保存領域の更新のため接続を閉じました。");
+          DB.lastOpenState = "別のタブの版更新のため接続を閉じました";
         };
 
         database.onclose = () => {
-          if (DB.db === database) DB.db = null;
+          if (DB.db === database) {
+            DB.db = null;
+            DB.lastOpenState = "接続が閉じられました";
+          }
         };
 
         resolve(database);
       };
     });
 
-    DB.opening = opening;
-    const cleanup = () => {
-      if (DB.opening === opening) DB.opening = null;
+    DB.opening = promise;
+
+    const clearOpening = () => {
+      if (DB.opening === promise) DB.opening = null;
     };
-    opening.then(cleanup, cleanup);
-    return opening;
+
+    promise.then(clearOpening, clearOpening);
+    return promise;
   },
 
-  clipToken(record) {
-    return JSON.stringify([record.sessionId || "", record.id]);
+  close() {
+    if (DB.db) {
+      DB.db.close();
+      DB.db = null;
+    }
+    DB.lastOpenState = "接続を閉じました";
   },
 
-  noteFailure(storeNames, error, meta) {
-    DB.failures.writeAttempts += 1;
+  /*
+   * トランザクションを作る段階で接続が閉じていた場合に限り、
+   * 再接続して一度だけ作り直す。
+   * 書き込み開始後の処理を自動再実行しない。
+   */
+  async createTransaction(names, mode) {
+    let database = await DB.open();
 
-    for (const name of new Set(storeNames)) {
-      DB.failures.byStore[name] =
-        (DB.failures.byStore[name] || 0) + 1;
+    try {
+      return database.transaction(names, mode);
+    } catch (error) {
+      if (error && error.name === "InvalidStateError") {
+        if (DB.db === database) DB.close();
+        database = await DB.open();
+        return database.transaction(names, mode);
+      }
+      throw error;
+    }
+  },
+
+  trackWrite(promise) {
+    DB.pendingWrites.add(promise);
+
+    const remove = () => DB.pendingWrites.delete(promise);
+    promise.then(remove, remove);
+
+    return promise;
+  },
+
+  clipToken(clip) {
+    return JSON.stringify([clip.sessionId || "", clip.id]);
+  },
+
+  recordFailure(names, error, clips) {
+    DB.failureAttempts += 1;
+
+    for (const name of new Set(names)) {
+      DB.failuresByStore[name] = (DB.failuresByStore[name] || 0) + 1;
     }
 
-    const clips = meta && Array.isArray(meta.clips) ? meta.clips : [];
-    DB.failures.clipWriteAttempts += clips.length;
-
-    for (const clip of clips) {
-      DB.failures.unsavedClips.set(DB.clipToken(clip), {
+    for (const clip of clips || []) {
+      DB.unsavedClips.set(DB.clipToken(clip), {
         id: clip.id,
         sessionId: clip.sessionId || null
       });
     }
 
-    DB.failures.last = {
+    DB.lastFailure = {
       at: Date.now(),
-      stores: [...storeNames],
+      stores: [...names],
       name: error && error.name ? error.name : "Error",
       message: error && error.message ? error.message : String(error)
     };
-
-    console.warn("端末保存に失敗しました。", DB.failures.last);
   },
 
-  noteSuccess(meta) {
-    const clips = meta && Array.isArray(meta.clips) ? meta.clips : [];
-    for (const clip of clips) {
-      DB.failures.unsavedClips.delete(DB.clipToken(clip));
+  recordSuccess(clips) {
+    for (const clip of clips || []) {
+      DB.unsavedClips.delete(DB.clipToken(clip));
     }
   },
 
-  failureSummary(sessionId) {
-    const unsaved = [...DB.failures.unsavedClips.values()].filter(
-      (clip) => sessionId === undefined || clip.sessionId === sessionId
-    );
-
-    return {
-      writeAttempts: DB.failures.writeAttempts,
-      clipWriteAttempts: DB.failures.clipWriteAttempts,
-      unsavedClipCount: unsaved.length,
-      unsavedClipIds: unsaved.map((clip) => clip.id),
-      byStore: { ...DB.failures.byStore },
-      last: DB.failures.last ? { ...DB.failures.last } : null
-    };
-  },
-
   /*
-   * actionは同期的にIndexedDBリクエストを登録する関数。
-   * action内でawaitを使わない。
-   * 読み取りも書き込みもtransaction.oncompleteで確定する。
+   * registerRequestsは同期関数。
+   * 内部でawaitせず、必要なリクエストを直ちに登録する。
+   * request.onsuccessではなくtransaction.oncompleteまで待つ。
    */
-  transaction(storeNames, mode, action, meta = {}) {
+  run(storeNames, mode, registerRequests, clips = []) {
     const names = Array.isArray(storeNames) ? storeNames : [storeNames];
 
-    const task = (async () => {
+    const operation = (async () => {
       try {
-        const database = await DB.open();
+        const transaction = await DB.createTransaction(names, mode);
 
         const result = await new Promise((resolve, reject) => {
-          const transaction = database.transaction(names, mode);
-          let output;
-          let synchronousError = null;
-          let requestError = null;
+          let value;
+          let firstError = null;
+          let settled = false;
 
-          transaction.oncomplete = () => resolve(output);
-          transaction.onerror = (event) => {
-            requestError =
-              (event.target && event.target.error) ||
-              transaction.error ||
-              requestError;
-            // preventDefaultしない。失敗したトランザクションは中断する。
+          function fail(error) {
+            if (settled) return;
+            settled = true;
+            reject(error);
+          }
+
+          transaction.oncomplete = () => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
           };
+
+          transaction.onerror = (event) => {
+            if (!firstError) {
+              firstError =
+                (event.target && event.target.error) ||
+                transaction.error ||
+                makeError("TransactionError", "DBの処理中にエラーが発生しました。");
+            }
+            // 既定の中断動作を止めない。
+          };
+
           transaction.onabort = () => {
-            reject(
-              synchronousError ||
-              requestError ||
+            fail(
+              firstError ||
               transaction.error ||
-              new Error("保存処理が中断されました。")
+              makeError("AbortError", "DBのトランザクションが中断されました。")
             );
           };
 
-          const api = {
-            store(name) {
-              return transaction.objectStore(name);
-            },
-            setResult(value) {
-              output = value;
+          function watch(request, onSuccess) {
+            request.onerror = () => {
+              if (!firstError) {
+                firstError =
+                  request.error ||
+                  makeError("RequestError", "DBのリクエストが失敗しました。");
+              }
+            };
+
+            if (onSuccess) {
+              request.onsuccess = () => {
+                try {
+                  onSuccess(request.result);
+                } catch (error) {
+                  if (!firstError) firstError = error;
+                  try {
+                    transaction.abort();
+                  } catch (ignored) {
+                    fail(error);
+                  }
+                }
+              };
             }
-          };
+
+            return request;
+          }
 
           try {
-            action(api);
-          } catch (e) {
-            synchronousError = e;
+            registerRequests(
+              transaction,
+              watch,
+              (resultValue) => { value = resultValue; }
+            );
+          } catch (error) {
+            firstError = error;
             try {
               transaction.abort();
-            } catch (abortError) {
-              reject(e);
+            } catch (ignored) {
+              fail(error);
             }
           }
         });
 
-        if (mode === "readwrite") DB.noteSuccess(meta);
+        if (mode === "readwrite") DB.recordSuccess(clips);
         return result;
-      } catch (e) {
-        if (mode === "readwrite") DB.noteFailure(names, e, meta);
-        throw e;
+      } catch (error) {
+        if (mode === "readwrite") {
+          DB.recordFailure(names, error, clips);
+        }
+        throw error;
       }
     })();
 
-    if (mode === "readwrite") {
-      DB.pendingWrites.add(task);
-      const cleanup = () => DB.pendingWrites.delete(task);
-      task.then(cleanup, cleanup);
-    }
-
-    return task;
+    return mode === "readwrite"
+      ? DB.trackWrite(operation)
+      : operation;
   },
 
   get(key) {
-    return DB.getRecord("kv", key);
+    return DB.run("kv", "readonly", (transaction, watch, setResult) => {
+      const store = transaction.objectStore("kv");
+      watch(store.get(key), (result) => {
+        setResult(result === undefined ? null : result);
+      });
+    });
   },
 
   put(key, value) {
-    return DB.transaction("kv", "readwrite", ({ store }) => {
-      store("kv").put(value, key);
+    /*
+     * 旧コードと同じ「キー指定のkv.put(value, key)」を直接行う。
+     * 予期しないkv形式を無理に変換したり、ストアを作り直したりしない。
+     */
+    return DB.run("kv", "readwrite", (transaction, watch) => {
+      const store = transaction.objectStore("kv");
+
+      if (store.keyPath !== null) {
+        throw makeError(
+          "KVSchemaMismatch",
+          "kvのkeyPathが旧コードの形式と異なります。keyPath=" +
+          JSON.stringify(store.keyPath) +
+          "。データ保護のため、この保存領域は作り直していません。"
+        );
+      }
+
+      watch(store.put(value, key));
     });
   },
 
   getRecord(storeName, key) {
-    return DB.transaction(storeName, "readonly", ({ store, setResult }) => {
-      const request = store(storeName).get(key);
-      request.onsuccess = () => {
-        setResult(request.result === undefined ? null : request.result);
-      };
+    return DB.run(storeName, "readonly", (transaction, watch, setResult) => {
+      watch(transaction.objectStore(storeName).get(key), (result) => {
+        setResult(result === undefined ? null : result);
+      });
     });
   },
 
   putRecord(storeName, record) {
-    const meta = storeName === "clips" ? { clips: [record] } : {};
-    return DB.transaction(storeName, "readwrite", ({ store }) => {
-      store(storeName).put(record);
-    }, meta);
+    const clips = storeName === "clips" ? [record] : [];
+
+    return DB.run(storeName, "readwrite", (transaction, watch) => {
+      watch(transaction.objectStore(storeName).put(record));
+    }, clips);
   },
 
   putMany(storeName, records) {
     const rows = Array.from(records);
     if (!rows.length) return Promise.resolve();
 
-    const meta = storeName === "clips" ? { clips: rows } : {};
-    return DB.transaction(storeName, "readwrite", ({ store }) => {
-      const objectStore = store(storeName);
-      for (const row of rows) objectStore.put(row);
-    }, meta);
+    const clips = storeName === "clips" ? rows : [];
+
+    return DB.run(storeName, "readwrite", (transaction, watch) => {
+      const store = transaction.objectStore(storeName);
+      for (const row of rows) watch(store.put(row));
+    }, clips);
   },
 
-  /*
-   * イベントと音声を一つのトランザクションで保存する入口。
-   * どちらかが失敗した場合、両方を取り消す。
-   */
   putEventAndClip(event, clip) {
     if (
       !event ||
@@ -627,57 +769,62 @@ const DB = {
       event.sessionId !== clip.sessionId ||
       clip.eventId !== event.id
     ) {
-      return Promise.reject(
-        new Error("イベントと音声の識別情報が一致していません。")
-      );
+      return Promise.reject(makeError(
+        "EventClipMismatch",
+        "イベントと音声の識別情報が一致していません。"
+      ));
     }
 
-    return DB.transaction(
+    return DB.run(
       ["events", "clips"],
       "readwrite",
-      ({ store }) => {
-        store("events").put(event);
-        store("clips").put(clip);
+      (transaction, watch) => {
+        watch(transaction.objectStore("events").put(event));
+        watch(transaction.objectStore("clips").put(clip));
       },
-      { clips: [clip] }
+      [clip]
     );
   },
 
   getAll(storeName) {
-    return DB.transaction(storeName, "readonly", ({ store, setResult }) => {
-      const request = store(storeName).getAll();
-      request.onsuccess = () => setResult(request.result);
+    return DB.run(storeName, "readonly", (transaction, watch, setResult) => {
+      watch(transaction.objectStore(storeName).getAll(), setResult);
     });
   },
 
   getBySession(storeName, sessionId) {
-    return DB.transaction(storeName, "readonly", ({ store, setResult }) => {
-      const request = store(storeName)
-        .index("bySession")
-        .getAll(IDBKeyRange.only(sessionId));
-
-      request.onsuccess = () => setResult(request.result);
+    return DB.run(storeName, "readonly", (transaction, watch, setResult) => {
+      const index = transaction.objectStore(storeName).index("bySession");
+      watch(index.getAll(IDBKeyRange.only(sessionId)), setResult);
     });
   },
 
   count(storeName) {
-    return DB.transaction(storeName, "readonly", ({ store, setResult }) => {
-      const request = store(storeName).count();
-      request.onsuccess = () => setResult(request.result);
+    return DB.run(storeName, "readonly", (transaction, watch, setResult) => {
+      watch(transaction.objectStore(storeName).count(), setResult);
     });
   },
 
   deleteRecord(storeName, key) {
-    return DB.transaction(storeName, "readwrite", ({ store }) => {
-      store(storeName).delete(key);
+    return DB.run(storeName, "readwrite", (transaction, watch) => {
+      watch(transaction.objectStore(storeName).delete(key));
     });
   },
 
-  /*
-   * 新しい保存処理の投入を止めた後に呼ぶ。
-   * 完了を待つだけで、失敗を「成功」に変換しない。
-   * 最終的な未保存件数はfailureSummaryで取得する。
-   */
+  failureSummary(sessionId) {
+    const clips = [...DB.unsavedClips.values()].filter(
+      (clip) => sessionId === undefined || clip.sessionId === sessionId
+    );
+
+    return {
+      writeFailureAttempts: DB.failureAttempts,
+      unsavedClipCount: clips.length,
+      unsavedClipIds: clips.map((clip) => clip.id),
+      byStore: { ...DB.failuresByStore },
+      last: DB.lastFailure ? { ...DB.lastFailure } : null
+    };
+  },
+
   async waitForWrites() {
     while (DB.pendingWrites.size) {
       await Promise.allSettled([...DB.pendingWrites]);
@@ -687,93 +834,234 @@ const DB = {
 
   async inspect() {
     const database = await DB.open();
-    const expected = ["kv", "sessions", "secs", "events", "clips"];
-    const stores = [...database.objectStoreNames];
-    const missing = expected.filter((name) => !stores.includes(name));
+    const names = [...database.objectStoreNames];
 
-    if (missing.length) {
-      throw new Error("必要な保存領域がありません：" + missing.join("、"));
-    }
+    const schema = await DB.run(
+      names,
+      "readonly",
+      (transaction, watch, setResult) => {
+        const stores = {};
 
-    const result = await DB.transaction(expected, "readonly", ({ store, setResult }) => {
-      const schema = {};
-      for (const name of expected) {
-        const objectStore = store(name);
-        schema[name] = {
-          keyPath: objectStore.keyPath,
-          indexes: [...objectStore.indexNames]
-        };
+        for (const name of names) {
+          const store = transaction.objectStore(name);
+          const indexes = {};
+
+          for (const indexName of store.indexNames) {
+            const index = store.index(indexName);
+            indexes[indexName] = {
+              keyPath: index.keyPath,
+              unique: index.unique
+            };
+          }
+
+          stores[name] = {
+            keyPath: store.keyPath,
+            autoIncrement: store.autoIncrement,
+            indexes
+          };
+        }
+
+        setResult(stores);
       }
-      setResult(schema);
-    });
+    );
 
-    return {
+    const report = {
       name: database.name,
       version: database.version,
-      stores: result
+      stores: schema
     };
+
+    S.schema = report;
+    return report;
+  },
+
+  async verifySchema() {
+    const report = await DB.inspect();
+    const required = ["kv", "sessions", "secs", "events", "clips"];
+
+    const missing = required.filter(
+      (name) => !Object.prototype.hasOwnProperty.call(report.stores, name)
+    );
+
+    if (missing.length) {
+      throw makeError(
+        "DatabaseSchemaMismatch",
+        "必要な保存領域がありません：" + missing.join("、") +
+        "。既存データを保護するため、自動削除はしていません。"
+      );
+    }
+
+    const expectedKeyPaths = {
+      kv: null,
+      sessions: "id",
+      secs: ["sessionId", "sec"],
+      events: "id",
+      clips: "id"
+    };
+
+    for (const name of required) {
+      if (
+        JSON.stringify(report.stores[name].keyPath) !==
+        JSON.stringify(expectedKeyPaths[name])
+      ) {
+        throw makeError(
+          "DatabaseSchemaMismatch",
+          name + "のkeyPathが想定と異なります：" +
+          JSON.stringify(report.stores[name].keyPath)
+        );
+      }
+    }
+
+    const expectedIndexes = {
+      sessions: { byStartedAt: "startedAt" },
+      secs: { bySession: "sessionId" },
+      events: {
+        bySession: "sessionId",
+        bySessionStart: ["sessionId", "startAt"]
+      },
+      clips: {
+        bySession: "sessionId",
+        byEvent: "eventId",
+        bySessionStart: ["sessionId", "startAt"]
+      }
+    };
+
+    for (const name of Object.keys(expectedIndexes)) {
+      for (const indexName of Object.keys(expectedIndexes[name])) {
+        const actual = report.stores[name].indexes[indexName];
+
+        if (
+          !actual ||
+          actual.unique ||
+          JSON.stringify(actual.keyPath) !==
+          JSON.stringify(expectedIndexes[name][indexName])
+        ) {
+          throw makeError(
+            "DatabaseIndexMismatch",
+            name + "のインデックス" + indexName + "が想定と異なります。"
+          );
+        }
+      }
+    }
+
+    return report;
   }
 };
 
-/* ===== 状態 ===== */
-const S = {
-  patient: null,
-  pending: null,
-  perms: false,
-  refDone: false,
-  recording: false,
-  scanStream: null,
-  scanTimer: null,
-  setup: {},
-  setupSaveQueue: Promise.resolve(),
-  updating: false,
-  dbReady: false
-};
+/* ===== 実際のエラーを表示：患者情報は診断文に含めない ===== */
+function errorHint(error) {
+  const name = error && error.name ? error.name : "Error";
 
-const PAGES = [
-  "perm", "home", "scan", "mail", "confirm",
-  "setup1", "setup2", "record", "review", "share"
-];
-
-function showPage(name) {
-  for (const page of PAGES) {
-    $("page-" + page).hidden = page !== name;
+  switch (name) {
+    case "VersionError":
+      return "端末のDBが、このコードが指定する版2より新しい可能性があります。サイトデータは削除しないでください。";
+    case "DatabaseBlockedError":
+      return "同じアプリを開いているほかのタブを閉じてから再度お試しください。";
+    case "DatabaseOpenTimeout":
+      return "DBの接続待ちが完了していません。ほかのタブを閉じて再度お試しください。";
+    case "QuotaExceededError":
+      return "このエラーは保存容量の制限を示しています。端末の空き容量を確認してください。";
+    case "SecurityError":
+    case "IndexedDBUnavailable":
+      return "ブラウザまたはこの環境で保存機能が制限されています。";
+    case "DataCloneError":
+      return "保存対象にIndexedDBへ保存できない値が含まれています。コード側の確認が必要です。";
+    case "KVSchemaMismatch":
+    case "DatabaseSchemaMismatch":
+    case "DatabaseIndexMismatch":
+      return "保存領域の形式が想定と異なります。既存データは削除せず、この表示を確認してください。";
+    case "TransactionInactiveError":
+    case "InvalidStateError":
+    case "NotFoundError":
+    case "DataError":
+    case "TypeError":
+      return "保存処理またはDB構造の確認が必要です。容量不足とは断定できません。";
+    default:
+      return "この表示だけで容量不足とは判断していません。エラー名と詳細を確認してください。";
   }
-  if (name !== "scan") stopScan();
-  window.scrollTo(0, 0);
 }
 
-function msg(id, text) {
-  const element = $(id);
-  element.textContent = text || "";
-  element.hidden = !text;
-}
+function formatError(context, error) {
+  const errorName = error && error.name ? error.name : "Error";
+  const errorMessage = error && error.message
+    ? error.message
+    : String(error);
 
-/*
- * 設定は部分更新で保持する。
- * スライダー保存と基準音設定が重なっても既存項目を消さない。
- * キューを使い、書き込む順序をそろえる。
- */
-function saveSetup(patch) {
-  const next = {
-    ...S.setup,
-    ...patch,
-    updatedAt: Date.now()
+  const database = DB.db;
+  const schema = S.schema;
+  const version = database
+    ? database.version
+    : schema
+      ? schema.version
+      : "未取得";
+
+  const stores = database
+    ? [...database.objectStoreNames].join("、")
+    : schema
+      ? Object.keys(schema.stores).join("、")
+      : "未取得";
+
+  const kvPath = schema && schema.stores.kv
+    ? JSON.stringify(schema.stores.kv.keyPath)
+    : "未取得";
+
+  const text = [
+    context,
+    "",
+    "版：" + APP_VERSION,
+    "エラー名：" + errorName,
+    "詳細：" + errorMessage,
+    "DB：" + DB.name,
+    "指定DB版：" + DB.version,
+    "取得DB版：" + version,
+    "接続状態：" + DB.lastOpenState,
+    "保存領域：" + stores,
+    "kv keyPath：" + kvPath,
+    "",
+    errorHint(error)
+  ].join("\n");
+
+  S.lastError = {
+    at: Date.now(),
+    context,
+    name: errorName,
+    message: errorMessage,
+    text
   };
-  S.setup = next;
 
-  const task = S.setupSaveQueue.then(() => DB.put("setup", next));
-  S.setupSaveQueue = task.catch(() => {});
+  console.error(text, error);
+  return text;
+}
+
+/* ===== 設定保存：完了後にだけメモリ上の設定を確定 ===== */
+function saveSetup(patch) {
+  const patchCopy = { ...patch };
+
+  const task = S.setupSaveQueue.then(async () => {
+    const next = {
+      ...S.setup,
+      ...patchCopy,
+      updatedAt: Date.now()
+    };
+
+    await DB.put("setup", next);
+    S.setup = next;
+    return next;
+  });
+
+  // 失敗後も、次の保存操作を行えるようキューだけを復帰させる。
+  // 呼び出し側へ返すtaskは失敗したまま。
+  S.setupSaveQueue = task.then(() => undefined, () => undefined);
   return task;
 }
 
-/* ===== 更新：最新コミットに固定したHTMLを取得 ===== */
+/* ===== 更新先はモックアップ専用 ===== */
 const UPDATE_CONFIG = Object.freeze({
   owner: "matsuodentalassociation",
   repository: "ST-mock-up",
   branch: "main",
   file: "index.html",
-  storageKey: "SomnoLogMockup.appPackage.v1",
+  packageKey: "SomnoLogMockup.appPackage.v1",
   timeoutMs: 30000
 });
 
@@ -799,26 +1087,32 @@ async function fetchFresh(url, accept) {
       mode: "cors",
       cache: "no-store",
       credentials: "omit",
-      redirect: "follow",
       headers: { Accept: accept },
       signal: controller.signal
     });
 
     if (!response.ok) {
       if (response.status === 403 || response.status === 429) {
-        throw new Error(
-          "GitHubの取得制限に達した可能性があります。時間を置いて再度お試しください。"
+        throw makeError(
+          "GitHubFetchLimit",
+          "GitHubの取得制限などにより更新を取得できませんでした（HTTP " +
+          response.status + "）。時間を置いて再度お試しください。"
         );
       }
+
       if (response.status === 404) {
-        throw new Error(
-          "更新先のリポジトリ・ブランチ・index.htmlを見つけられませんでした。"
+        throw makeError(
+          "UpdateNotFound",
+          "ST-mock-upのmainブランチのindex.htmlを見つけられませんでした。"
         );
       }
-      throw new Error("更新ファイルの取得に失敗しました（" + response.status + "）。");
+
+      throw makeError(
+        "UpdateFetchError",
+        "更新の取得に失敗しました（HTTP " + response.status + "）。"
+      );
     }
 
-    // 本文の受信にもタイムアウトを適用する。
     return await response.text();
   } finally {
     clearTimeout(timer);
@@ -832,32 +1126,29 @@ function validateUpdateHTML(html) {
     !/<\/html\s*>/i.test(html) ||
     !html.includes('const APP_ID = "SomnoLogMockup";')
   ) {
-    throw new Error("取得したファイルが対応するモックアップHTMLではありません。");
+    throw makeError(
+      "UpdateValidationError",
+      "取得したHTMLが、このモックアップの更新形式ではありません。"
+    );
   }
 
   const match = html.match(
     /const\s+APP_VERSION_NUMBER\s*=\s*(\d+)\s*;/
   );
+
   const version = match ? Number(match[1]) : NaN;
 
-  if (!Number.isSafeInteger(version) || version < 1) {
-    throw new Error("取得したファイルのバージョンを確認できませんでした。");
-  }
-
-  const exactMarker = "const APP_VERSION_NUMBER = " + version + ";";
-  if (!html.includes(exactMarker)) {
-    throw new Error("取得したファイルの更新用バージョン表記が対応していません。");
-  }
-
-  /*
-   * 保存版は相対URLの基準が変わらない同一URLで実行する。
-   * 更新後のコードも同じアプリ識別子・保存版起動処理を維持する。
-   */
   if (
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    !html.includes("const APP_VERSION_NUMBER = " + version + ";") ||
     !html.includes("SomnoLogMockup.appPackage.v1") ||
     !html.includes("__SOMNO_MOCKUP_APPLIED__")
   ) {
-    throw new Error("取得したファイルに保存版の起動処理がありません。");
+    throw makeError(
+      "UpdateValidationError",
+      "取得したHTMLのバージョンまたは保存版の起動処理を確認できませんでした。"
+    );
   }
 
   return version;
@@ -865,8 +1156,9 @@ function validateUpdateHTML(html) {
 
 async function updateApp() {
   if (S.updating) return;
-  if (S.recording) {
-    msg("home-msg", "記録を停止してから更新してください。");
+
+  if (S.recording || S.registering || !$("ref-dialog").hidden) {
+    msg("home-msg", "記録や設定の処理が終わってから更新してください。");
     return;
   }
 
@@ -875,44 +1167,51 @@ async function updateApp() {
   msg("home-msg", "最新版を確認しています。");
 
   try {
-    const repository = UPDATE_CONFIG.owner + "/" + UPDATE_CONFIG.repository;
+    const repository =
+      UPDATE_CONFIG.owner + "/" + UPDATE_CONFIG.repository;
 
-    const commitsURL = new URL(
+    /*
+     * index.htmlを変更した最新コミットを取得する。
+     * 本文はそのSHAに固定して取得する。
+     */
+    const commitURL = new URL(
       "https://api.github.com/repos/" + repository + "/commits"
     );
-    commitsURL.searchParams.set("sha", UPDATE_CONFIG.branch);
-    commitsURL.searchParams.set("path", UPDATE_CONFIG.file);
-    commitsURL.searchParams.set("per_page", "1");
+    commitURL.searchParams.set("sha", UPDATE_CONFIG.branch);
+    commitURL.searchParams.set("path", UPDATE_CONFIG.file);
+    commitURL.searchParams.set("per_page", "1");
 
-    const commitsText = await fetchFresh(
-      commitsURL.href,
+    const commits = JSON.parse(await fetchFresh(
+      commitURL.href,
       "application/vnd.github+json"
-    );
-    const commits = JSON.parse(commitsText);
+    ));
+
     const commit = Array.isArray(commits) && commits[0]
       ? commits[0].sha
       : null;
 
     if (!/^[a-f0-9]{40}$/i.test(commit || "")) {
-      throw new Error("index.htmlの最新コミットを確認できませんでした。");
+      throw makeError(
+        "UpdateCommitError",
+        "index.htmlの最新コミットを確認できませんでした。"
+      );
     }
 
-    /*
-     * mainの可変URLではなく、取得したコミットSHAに固定する。
-     * GitHub Pagesの公開反映待ちを避け、版の取り違えを防ぐ。
-     */
     const rawURL =
       "https://raw.githubusercontent.com/" +
-      repository + "/" +
-      commit + "/" +
-      UPDATE_CONFIG.file;
+      repository + "/" + commit + "/" + UPDATE_CONFIG.file;
 
-    const html = await fetchFresh(rawURL, "text/html, text/plain;q=0.9");
+    const html = await fetchFresh(
+      rawURL,
+      "text/html, text/plain;q=0.9"
+    );
+
     const version = validateUpdateHTML(html);
 
     if (version < APP_VERSION_NUMBER) {
-      throw new Error(
-        "GitHubの版は現在の版より古いため適用しませんでした。"
+      throw makeError(
+        "UpdateOlderVersion",
+        "GitHubの版は現在の版より古いため、適用していません。"
       );
     }
 
@@ -933,78 +1232,76 @@ async function updateApp() {
       html
     };
 
-    /*
-     * 保存容量不足・保存禁止の場合はここで例外になる。
-     * 保存できていない状態で再読み込みしない。
-     */
     const serialized = JSON.stringify(pkg);
-    localStorage.setItem(UPDATE_CONFIG.storageKey, serialized);
+    localStorage.setItem(UPDATE_CONFIG.packageKey, serialized);
 
-    if (localStorage.getItem(UPDATE_CONFIG.storageKey) !== serialized) {
-      throw new Error("取得した最新版を端末に保存できませんでした。");
+    if (localStorage.getItem(UPDATE_CONFIG.packageKey) !== serialized) {
+      throw makeError(
+        "UpdateSaveError",
+        "取得した最新版を端末へ保存できませんでした。"
+      );
     }
 
-    const nextURL = new URL(location.href);
-    nextURL.searchParams.delete("normal");
-    nextURL.searchParams.set("v", String(Date.now()));
+    const next = new URL(location.href);
+    next.searchParams.delete("normal");
+    next.searchParams.set("v", String(Date.now()));
 
-    /*
-     * hashにある患者情報などは保持する。
-     * 再起動時、headの起動処理が保存された新しいHTMLを適用する。
-     */
-    location.replace(nextURL.href);
-  } catch (e) {
-    console.warn("アプリの更新に失敗しました。", e);
-
-    if (e && e.name === "AbortError") {
+    location.replace(next.href);
+  } catch (error) {
+    if (error && error.name === "AbortError") {
       msg("home-msg", "更新の取得が時間切れになりました。通信を確認して再度お試しください。");
-    } else if (
-      e &&
-      (e.name === "QuotaExceededError" || e.name === "SecurityError")
-    ) {
-      msg("home-msg", "最新版を端末に保存できませんでした。空き容量とブラウザの保存設定を確認してください。");
     } else {
-      msg("home-msg", e && e.message ? e.message : "更新できませんでした。");
+      msg(
+        "home-msg",
+        "更新できませんでした。\n" +
+        (error && error.name ? error.name : "Error") + "\n" +
+        (error && error.message ? error.message : String(error))
+      );
     }
+
+    console.error("更新エラー", error);
   } finally {
     S.updating = false;
     $("btn-update").disabled = false;
   }
 }
 
-/* ===== 患者情報の受け取り ===== */
+/* ===== 患者情報の受け取り：元の対応項目を維持 ===== */
+function isPatientObject(object) {
+  return !!(
+    object &&
+    typeof object === "object" &&
+    !Array.isArray(object) &&
+    (object.clinicName || object.patientName || object.serial)
+  );
+}
+
 function parsePayload(text) {
   if (!text) return null;
 
   try {
-    const object = JSON.parse(text);
-    if (
-      object &&
-      typeof object === "object" &&
-      (object.clinicName || object.patientName || object.serial)
-    ) {
-      return object;
-    }
-  } catch (e) {
-    // JSONでなければ次を試す。
+    const object = JSON.parse(String(text));
+    if (isPatientObject(object)) return object;
+  } catch (ignored) {
+    // 二次元コード・リンク形式を次に試す。
   }
 
   const match = String(text).match(/slp=([A-Za-z0-9\-_]+)/);
-  if (match) {
-    try {
-      const base64 = match[1].replace(/-/g, "+").replace(/_/g, "/");
-      const binary = atob(
-        base64 + "=".repeat((4 - base64.length % 4) % 4)
-      );
-      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-      const object = JSON.parse(new TextDecoder().decode(bytes));
-      if (object && typeof object === "object") return object;
-    } catch (e) {
-      // 解釈できなければnull。
-    }
-  }
+  if (!match) return null;
 
-  return null;
+  try {
+    const base64 = match[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(
+      binary,
+      (character) => character.charCodeAt(0)
+    );
+    const object = JSON.parse(new TextDecoder().decode(bytes));
+    return isPatientObject(object) ? object : null;
+  } catch (ignored) {
+    return null;
+  }
 }
 
 function parseMemoText(text) {
@@ -1025,15 +1322,14 @@ function parseMemoText(text) {
     const fullWidth = line.indexOf("：");
     const halfWidth = line.indexOf(":");
     const position = fullWidth >= 0 ? fullWidth : halfWidth;
+
     if (position < 0) continue;
 
     const key = map[line.slice(0, position).trim()];
     if (key) object[key] = line.slice(position + 1).trim();
   }
 
-  return object.clinicName || object.patientName || object.serial
-    ? object
-    : null;
+  return isPatientObject(object) ? object : null;
 }
 
 function toConfirm(patient) {
@@ -1046,52 +1342,98 @@ function toConfirm(patient) {
   showPage("confirm");
 }
 
-/* ===== 1ページ　許可：元の流れを維持 ===== */
+/*
+ * 患者情報はJSONとして受け取った構造を維持して保存する。
+ * JSON化を一度挟み、DOMや関数等を含まない保存用の値にする。
+ * 不正値のため変換に失敗した場合は、保存成功扱いにしない。
+ */
+function patientForStorage(patient) {
+  const json = JSON.stringify(patient);
+  const result = JSON.parse(json);
+
+  if (!isPatientObject(result)) {
+    throw makeError(
+      "PatientDataError",
+      "保存する患者情報を確認できませんでした。"
+    );
+  }
+
+  return result;
+}
+
+/* ===== 1ページ　許可 ===== */
 $("btn-perm").addEventListener("click", () => {
   if ($("btn-perm").disabled) return;
+
   $("btn-perm").disabled = true;
   msg("perm-msg", "");
 
-  let motionPromise = null;
-  if (
-    typeof DeviceOrientationEvent !== "undefined" &&
-    typeof DeviceOrientationEvent.requestPermission === "function"
-  ) {
-    try {
-      motionPromise = DeviceOrientationEvent.requestPermission();
-    } catch (e) {
-      motionPromise = null;
+  /*
+   * iPhoneのモーション許可はクリック中に同期的に要求する。
+   * 実データの取り込みは後段で接続する。
+   */
+  const motionPromises = [];
+
+  for (const name of ["DeviceMotionEvent", "DeviceOrientationEvent"]) {
+    const type = window[name];
+    if (type && typeof type.requestPermission === "function") {
+      try {
+        motionPromises.push(
+          Promise.resolve(type.requestPermission()).catch(() => "denied")
+        );
+      } catch (ignored) {
+        motionPromises.push(Promise.resolve("denied"));
+      }
     }
   }
 
   const cameraPromise =
-    navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function"
       ? navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-      : Promise.reject(new Error("no media"));
+      : Promise.reject(makeError(
+          "MediaUnavailable",
+          "カメラ・マイクの機能を使用できません。"
+        ));
 
   Promise.all([
-    Promise.resolve(motionPromise).catch(() => "denied"),
+    Promise.all(motionPromises),
     cameraPromise
   ])
     .then(async ([, stream]) => {
       stream.getTracks().forEach((track) => track.stop());
+
+      if (S.bootPromise) await S.bootPromise;
       S.perms = true;
 
-      const saved = await saveSetup({
-        perms: true,
-        refDone: S.refDone
-      }).then(() => true, () => false);
-
-      showPage("home");
-      if (!saved) {
-        msg("home-msg", "許可は取れましたが、設定の保存に失敗しました。次回も許可の画面が出ることがあります。");
+      try {
+        await saveSetup({
+          perms: true,
+          refDone: S.refDone
+        });
+        showPage("home");
+        msg("home-msg", "");
+      } catch (error) {
+        showPage("home");
+        msg(
+          "home-msg",
+          formatError(
+            "許可は取れましたが、設定を保存できませんでした。",
+            error
+          )
+        );
       }
     })
-    .catch((e) => {
-      if (e && e.name === "NotAllowedError") {
+    .catch((error) => {
+      if (error && error.name === "NotAllowedError") {
         msg("perm-msg", "許可されませんでした。ブラウザの設定でカメラとマイクを許可してください。");
       } else {
-        msg("perm-msg", "カメラ・マイクを開けませんでした。ほかのアプリで使われていないか確認してください。");
+        msg(
+          "perm-msg",
+          "カメラ・マイクを開けませんでした。\n" +
+          (error && error.name ? error.name : "Error") + "\n" +
+          (error && error.message ? error.message : String(error))
+        );
       }
     })
     .finally(() => {
@@ -1112,14 +1454,17 @@ $("btn-start").addEventListener("click", () => {
     msg("home-msg", "患者情報が登録されていません。②か③で登録してください。");
     return;
   }
+
   msg("home-msg", "");
   showPage(S.refDone ? "record" : "setup1");
 });
 
 $("btn-update").addEventListener("click", updateApp);
 
-/* ===== 3ページ　二次元コードを読む ===== */
+/* ===== 3ページ　二次元コード ===== */
 async function startScan() {
+  stopScan();
+  const generation = S.scanGeneration;
   msg("scan-msg", "");
 
   if (!("BarcodeDetector" in window)) {
@@ -1132,8 +1477,10 @@ async function startScan() {
       video: { facingMode: "environment" }
     });
 
-    // 許可待ちの間にページを離れた場合、カメラを残さない。
-    if ($("page-scan").hidden) {
+    if (
+      generation !== S.scanGeneration ||
+      $("page-scan").hidden
+    ) {
       stream.getTracks().forEach((track) => track.stop());
       return;
     }
@@ -1142,39 +1489,60 @@ async function startScan() {
     $("scan-video").srcObject = stream;
     await $("scan-video").play();
 
+    if (
+      generation !== S.scanGeneration ||
+      $("page-scan").hidden
+    ) return;
+
     const detector = new BarcodeDetector({ formats: ["qr_code"] });
 
     const tick = async () => {
-      if (!S.scanStream || $("page-scan").hidden) return;
+      if (
+        generation !== S.scanGeneration ||
+        !S.scanStream ||
+        $("page-scan").hidden
+      ) return;
 
       try {
         const codes = await detector.detect($("scan-video"));
+
+        if (
+          generation !== S.scanGeneration ||
+          $("page-scan").hidden
+        ) return;
+
         if (codes && codes.length) {
           const patient = parsePayload(codes[0].rawValue || "");
-          if (patient && S.scanStream && !$("page-scan").hidden) {
-            stopScan();
+          if (patient) {
             toConfirm(patient);
             return;
           }
         }
-      } catch (e) {
-        // 読み取りは続ける。
+      } catch (ignored) {
+        // 読み取りを続ける。
       }
 
-      if (S.scanStream && !$("page-scan").hidden) {
+      if (
+        generation === S.scanGeneration &&
+        S.scanStream &&
+        !$("page-scan").hidden
+      ) {
         S.scanTimer = setTimeout(tick, 300);
       }
     };
 
     tick();
-  } catch (e) {
+  } catch (error) {
+    if (generation !== S.scanGeneration) return;
     stopScan();
     msg("scan-msg", "カメラを開けませんでした。");
   }
 }
 
 function stopScan() {
-  if (S.scanTimer) {
+  S.scanGeneration += 1;
+
+  if (S.scanTimer !== null) {
     clearTimeout(S.scanTimer);
     S.scanTimer = null;
   }
@@ -1184,12 +1552,13 @@ function stopScan() {
     S.scanStream = null;
   }
 
-  $("scan-video").srcObject = null;
+  const video = $("scan-video");
+  if (video) video.srcObject = null;
 }
 
 $("btn-scan-back").addEventListener("click", () => showPage("home"));
 
-/* ===== 4ページ　メールの情報を読み込む ===== */
+/* ===== 4ページ　メール ===== */
 $("btn-import").addEventListener("click", () => $("file-import").click());
 
 $("file-import").addEventListener("change", async () => {
@@ -1201,45 +1570,87 @@ $("file-import").addEventListener("change", async () => {
 
   try {
     const patient = parseMemoText(await file.text());
+
     if (patient) toConfirm(patient);
     else msg("mail-msg", "患者情報を読み取れませんでした。ファイルを確認してください。");
-  } catch (e) {
-    msg("mail-msg", "ファイルを開けませんでした。ファイルを確認してください。");
+  } catch (error) {
+    msg(
+      "mail-msg",
+      "ファイルを読み込めませんでした。\n" +
+      (error && error.message ? error.message : String(error))
+    );
   }
 });
 
 $("btn-mail-back").addEventListener("click", () => showPage("home"));
 
-/* ===== 5ページ　情報の確認 ===== */
+/* ===== 5ページ　患者情報の保存 ===== */
 $("btn-ok").addEventListener("click", async () => {
-  if (!S.pending || $("btn-ok").disabled) return;
-  const patient = S.pending;
+  if (!S.pending || S.registering) return;
+
+  S.registering = true;
   $("btn-ok").disabled = true;
+  $("btn-ng").disabled = true;
 
   try {
-    // 保存が完了した後に、登録済み状態へ切り替える。
+    if (S.bootPromise) await S.bootPromise;
+
+    const patient = patientForStorage(S.pending);
+
+    /*
+     * DBへ直接保存し、トランザクション完了まで待つ。
+     * 保存できていないのに次へ進める回避はしない。
+     */
     await DB.put("patient", patient);
-    S.patient = patient;
+
+    /*
+     * 同じキーで読み戻し、実際に保存されたことも確認する。
+     */
+    const savedPatient = await DB.get("patient");
+
+    if (
+      !isPatientObject(savedPatient) ||
+      JSON.stringify(savedPatient) !== JSON.stringify(patient)
+    ) {
+      throw makeError(
+        "PatientReadbackError",
+        "患者情報の書き込み後の読み戻しが一致しませんでした。"
+      );
+    }
+
+    S.patient = savedPatient;
     S.pending = null;
+    S.lastError = null;
+
     showPage(S.refDone ? "record" : "setup1");
-  } catch (e) {
-    console.warn(e);
-    alert("患者情報を保存できませんでした。端末の空き容量とブラウザの保存設定を確認してください。");
+  } catch (error) {
+    /*
+     * 診断の取得に失敗しても、本来の保存エラーは置き換えない。
+     */
+    try {
+      if (DB.db) await DB.inspect();
+    } catch (ignored) {
+      // 元のエラーを表示する。
+    }
+
+    alert(formatError("患者情報を保存・確認できませんでした。", error));
   } finally {
+    S.registering = false;
     $("btn-ok").disabled = false;
+    $("btn-ng").disabled = false;
   }
 });
 
 $("btn-ng").addEventListener("click", () => {
-  if ($("btn-ok").disabled) return;
+  if (S.registering) return;
   S.pending = null;
   showPage("perm");
 });
 
-/* ===== セッティング①：仮置きを維持 ===== */
+/* ===== セッティング①：画面の枠を維持 ===== */
 $("btn-setup1-next").addEventListener("click", () => showPage("setup2"));
 
-/* ===== 6ページ　セッティング②：段階2で実録音を接続 ===== */
+/* ===== セッティング②：実録音は段階2で実装 ===== */
 $("btn-ref-rec").addEventListener("click", () => {
   if ($("btn-ref-rec").disabled) return;
 
@@ -1249,9 +1660,10 @@ $("btn-ref-rec").addEventListener("click", () => {
   msg("setup2-msg", "");
 
   /*
-   * v2の画面確認用タイマーを維持。
-   * ここではPCMを録音していない。
-   * refDoneは現時点ではモックの画面通過フラグ。
+   * 元のモックの動作を維持する。
+   * このタイマーは録音処理ではない。
+   * refDoneは、この段階では画面確認用のフラグ。
+   * 段階2では実PCMの存在確認へ置き換える。
    */
   setTimeout(async () => {
     $("ref-dialog").hidden = true;
@@ -1261,10 +1673,14 @@ $("btn-ref-rec").addEventListener("click", () => {
         perms: S.perms,
         refDone: true
       });
+
       S.refDone = true;
       $("btn-ref-play").disabled = false;
-    } catch (e) {
-      msg("setup2-msg", "設定を保存できませんでした。端末の空き容量とブラウザの保存設定を確認してください。");
+    } catch (error) {
+      msg(
+        "setup2-msg",
+        formatError("基準音の設定フラグを保存できませんでした。", error)
+      );
     } finally {
       $("btn-ref-rec").disabled = false;
       $("btn-setup-done").disabled = false;
@@ -1283,8 +1699,11 @@ $("gain-slider").addEventListener("change", async () => {
   try {
     await saveSetup({ gainDb });
     msg("setup2-msg", "");
-  } catch (e) {
-    msg("setup2-msg", "音圧調整の設定を保存できませんでした。");
+  } catch (error) {
+    msg(
+      "setup2-msg",
+      formatError("音圧調整の設定を保存できませんでした。", error)
+    );
   }
 });
 
@@ -1298,34 +1717,39 @@ $("btn-setup-done").addEventListener("click", () => {
   showPage("record");
 });
 
-/* ===== 7ページ　記録：段階3以降で実処理を接続 ===== */
+/* ===== 長押し ===== */
 function longPress(element, milliseconds, callback) {
   let timer = null;
-  let activePointer = null;
+  let pointerId = null;
 
   function cancel() {
     if (timer !== null) {
       clearTimeout(timer);
       timer = null;
     }
-    activePointer = null;
+    pointerId = null;
   }
 
+  element.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
   element.addEventListener("pointerdown", (event) => {
-    if (activePointer !== null || element.disabled) return;
+    if (pointerId !== null || element.disabled) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
-    activePointer = event.pointerId;
+    pointerId = event.pointerId;
+
     timer = setTimeout(() => {
       timer = null;
-      activePointer = null;
+      pointerId = null;
       callback();
     }, milliseconds);
   });
 
-  for (const eventName of ["pointerup", "pointerleave", "pointercancel"]) {
+  for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
     element.addEventListener(eventName, (event) => {
-      if (event.pointerId === activePointer) cancel();
+      if (event.pointerId === pointerId) cancel();
     });
   }
 
@@ -1335,6 +1759,7 @@ function longPress(element, milliseconds, callback) {
   });
 }
 
+/* ===== 7ページ　元のモック動作 ===== */
 function setRecUI() {
   $("btn-rec-start").hidden = S.recording;
   $("btn-rec-black").hidden = !S.recording;
@@ -1342,7 +1767,7 @@ function setRecUI() {
 }
 
 $("btn-rec-start").addEventListener("click", () => {
-  // まだ実録音は開始しない。元のモックのUI動作。
+  // 実録音はまだ接続していない。
   S.recording = true;
   setRecUI();
 });
@@ -1356,7 +1781,8 @@ longPress($("btn-rec-stop"), 2000, () => {
 function refreshBlackClock() {
   const date = new Date();
   $("black-clock").textContent =
-    date.getHours() + ":" + String(date.getMinutes()).padStart(2, "0");
+    date.getHours() + ":" +
+    String(date.getMinutes()).padStart(2, "0");
 }
 
 $("btn-rec-black").addEventListener("click", () => {
@@ -1374,14 +1800,18 @@ setInterval(() => {
 
 $("btn-to-calendar").addEventListener("click", () => showPage("review"));
 
-/* ===== 8ページ　見返す：段階7で保存データを接続 ===== */
+/* ===== 8ページ　カレンダーの枠 ===== */
 (function buildCalendar() {
   const grid = $("cal-grid");
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const days = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0
+  ).getDate();
 
-  for (let i = 0; i < first.getDay(); i++) {
+  for (let index = 0; index < first.getDay(); index++) {
     grid.appendChild(document.createElement("div"));
   }
 
@@ -1393,13 +1823,14 @@ $("btn-to-calendar").addEventListener("click", () => showPage("review"));
 })();
 
 $("btn-to-share").addEventListener("click", () => {
-  $("sh-addr").textContent = (S.patient && S.patient.logShareEmail) || "—";
+  $("sh-addr").textContent =
+    (S.patient && S.patient.logShareEmail) || "—";
   showPage("share");
 });
 
 $("btn-review-back").addEventListener("click", () => showPage("record"));
 
-/* ===== 9ページ　共有：段階8でZIP生成を接続 ===== */
+/* ===== 9ページ　共有の枠 ===== */
 $("sh-copy").addEventListener("click", async () => {
   const address = (S.patient && S.patient.logShareEmail) || "";
 
@@ -1411,7 +1842,7 @@ $("sh-copy").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(address);
     msg("sh-msg", "");
-  } catch (e) {
+  } catch (error) {
     msg("sh-msg", "コピーできませんでした。宛先：" + address);
   }
 });
@@ -1427,77 +1858,125 @@ $("sh-saved-ok").addEventListener("click", () => {
 });
 
 $("pick-close").addEventListener("click", () => {
+  $("pick-audio").pause();
   $("pick-dialog").hidden = true;
 });
 
 $("sh-back").addEventListener("click", () => showPage("record"));
 
-/* ===== 開発時の保存領域確認用：画面には項目を追加しない ===== */
+/* ===== 診断用：画面の並びやボタンを増やさない ===== */
 window.SomnoLogMockupDiagnostics = Object.freeze({
   version: APP_VERSION,
   inspectDatabase: () => DB.inspect(),
-  countRecords: async () => {
-    const names = ["sessions", "secs", "events", "clips"];
-    const counts = {};
-    for (const name of names) counts[name] = await DB.count(name);
-    return counts;
-  },
   failures: (sessionId) => DB.failureSummary(sessionId),
-  appliedCommit: () => window.__SOMNO_MOCKUP_APPLIED_COMMIT__ || null
+  lastError: () => S.lastError ? { ...S.lastError } : null,
+  appliedCommit: () => window.__SOMNO_MOCKUP_APPLIED_COMMIT__ || null,
+  countRecords: async () => {
+    const counts = {};
+
+    for (const name of ["sessions", "secs", "events", "clips"]) {
+      counts[name] = await DB.count(name);
+    }
+
+    return counts;
+  }
 });
 
-/* ===== 起動：保存された情報を読み、済んだ所は飛ばす ===== */
-(async function boot() {
+/* ===== 起動 ===== */
+async function boot() {
   $("app-version").textContent = APP_VERSION;
   setRecUI();
 
   let startupError = null;
 
   try {
-    const schema = await DB.inspect();
+    /*
+     * DBを開き、構造を実際に調べる。
+     * 調査時点でデータの消去や上書きをしない。
+     */
+    const schema = await DB.verifySchema();
     S.dbReady = true;
-    console.info("SomnoLogMockup 保存領域", schema);
+    console.info(APP_VERSION + " 保存領域", schema);
+  } catch (error) {
+    startupError = error;
+    S.dbReady = false;
+  }
 
+  /*
+   * 記録用ストアの検査が失敗しても、kvの読み取りは別途試す。
+   * 患者情報・設定の読込まで一括で断念しない。
+   */
+  try {
     const setup = await DB.get("setup");
-    if (setup && typeof setup === "object") {
+
+    if (setup && typeof setup === "object" && !Array.isArray(setup)) {
       S.setup = { ...setup };
       S.perms = !!setup.perms;
       S.refDone = !!setup.refDone;
 
-      const gainDb = Number(setup.gainDb);
-      if (Number.isFinite(gainDb)) {
-        $("gain-slider").value = String(Math.max(-9, Math.min(18, gainDb)));
+      if (setup.gainDb !== undefined && setup.gainDb !== null) {
+        const gainDb = Number(setup.gainDb);
+
+        if (Number.isFinite(gainDb)) {
+          $("gain-slider").value = String(
+            Math.max(-9, Math.min(18, gainDb))
+          );
+        }
       }
     }
+  } catch (error) {
+    if (!startupError) startupError = error;
+  }
 
-    S.patient = await DB.get("patient");
-  } catch (e) {
-    startupError = e;
-    console.warn("保存された情報を読み込めませんでした。", e);
+  try {
+    const patient = await DB.get("patient");
+    S.patient = isPatientObject(patient) ? patient : null;
+  } catch (error) {
+    if (!startupError) startupError = error;
   }
 
   if (S.refDone) $("btn-ref-play").disabled = false;
 
   const fromLink = parsePayload(location.hash || "");
+
   if (fromLink) {
     toConfirm(fromLink);
-    if (startupError) {
-      alert("保存領域を開けませんでした。ほかのタブを閉じ、端末の空き容量とブラウザの保存設定を確認してください。");
-    }
-    return;
+  } else if (!S.perms) {
+    showPage("perm");
+  } else if (!S.patient) {
+    showPage("home");
+  } else if (!S.refDone) {
+    showPage("setup1");
+  } else {
+    showPage("record");
   }
-
-  if (!S.perms) showPage("perm");
-  else if (!S.patient) showPage("home");
-  else if (!S.refDone) showPage("setup1");
-  else showPage("record");
 
   if (startupError) {
-    const text = "保存領域を開けませんでした。ほかのタブを閉じ、端末の空き容量とブラウザの保存設定を確認してください。";
+    const text = formatError(
+      "起動時に保存領域または保存情報の確認でエラーが発生しました。",
+      startupError
+    );
+
     msg("perm-msg", text);
     msg("home-msg", text);
+
+    /*
+     * リンクで確認画面へ直接入った場合も、起動エラーを隠さない。
+     * 登録済みでセッティング・記録画面へ入った場合も同様。
+     */
+    if (
+      fromLink ||
+      (S.perms && S.patient)
+    ) {
+      alert(text);
+    }
   }
-})();
+}
+
+S.bootPromise = boot().catch((error) => {
+  showPage("home");
+  msg("home-msg", formatError("アプリの起動処理でエラーが発生しました。", error));
+});
 </script>
 </body>
 </html>
