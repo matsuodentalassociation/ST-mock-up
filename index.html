@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V8</title>
+<title>③ST-mock-up_V9</title>
 
 <script>
 /*
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 8;
+  const EMBEDDED_VERSION = 9;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -131,7 +131,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V8</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V9</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -313,8 +313,8 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 8;
-const APP_VERSION = "③ST-mock-up_V8";
+const APP_VERSION_NUMBER = 9;
+const APP_VERSION = "③ST-mock-up_V9";
 const $ = (id) => document.getElementById(id);
 
 /* 検知の定数は手順書の現行値を一か所に置く */
@@ -766,12 +766,14 @@ async function startMic() {
 function onMotion(event) {
   const a = event.acceleration;
   const g = event.accelerationIncludingGravity;
-  let x;
-  let y;
-  let z;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  let hasData = false;
 
-  if (a && a.x != null && a.y != null && a.z != null) {
+  if (a && a.x != null && a.y != null && a.z != null && (a.x !== 0 || a.y !== 0 || a.z !== 0)) {
     x = a.x; y = a.y; z = a.z;
+    hasData = true;
   } else if (g && g.x != null && g.y != null && g.z != null) {
     const k = 0.8;
     METER.grav.x = k * METER.grav.x + (1 - k) * g.x;
@@ -780,12 +782,14 @@ function onMotion(event) {
     x = g.x - METER.grav.x;
     y = g.y - METER.grav.y;
     z = g.z - METER.grav.z;
-  } else {
-    return;
+    hasData = true;
   }
 
+  if (!hasData) return;
+
   const magnitude = Math.sqrt(x * x + y * y + z * z);
-  METER.motionPct = clamp(magnitude / 1.5 * 100, 0, 100);
+  const pct = clamp(magnitude / 1.5 * 100, 0, 100);
+  if (pct > METER.motionPct) METER.motionPct = pct;
   METER.motionSeen = true;
 }
 
@@ -862,8 +866,7 @@ async function startMeterQuietly(page) {
     if (!METER.stream && S.perms) {
       await startMic();
     }
-    if (!METER.motionListening && typeof window.DeviceMotionEvent !== "undefined" &&
-        typeof window.DeviceMotionEvent.requestPermission !== "function") {
+    if (!METER.motionListening && typeof window.DeviceMotionEvent !== "undefined") {
       startMotionListening();
     }
     msg(target, "");
