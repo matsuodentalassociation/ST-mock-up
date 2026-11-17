@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V11</title>
+<title>③ST-mock-up_V12</title>
 
 <script>
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 11;
+  const EMBEDDED_VERSION = 12;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -130,7 +130,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V11</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V12</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -183,6 +183,7 @@ audio{width:100%}
 <button id="btn-mic-perm" class="primary" type="button">マイクとモーションセンサーを許可</button>
 <p id="setup1-msg" class="err" hidden></p>
 <button id="btn-setup1-next" type="button" disabled>次へ</button>
+<button id="btn-setup1-back" class="sub" type="button">入口に戻る</button>
 </main>
 
 <!-- セッティング② -->
@@ -205,6 +206,7 @@ audio{width:100%}
 </div>
 <button id="btn-setup-done" class="primary" type="button">⑩ 完了</button>
 <p id="setup2-msg" class="err" hidden></p>
+<button id="btn-setup2-back" class="sub" type="button">セッティング①に戻る</button>
 </main>
 
 <!-- 基準音のポップアップ -->
@@ -231,6 +233,7 @@ audio{width:100%}
 <button id="btn-rec-black" class="primary" type="button" hidden>⑫ 黒画面に切り替える</button>
 <button id="btn-rec-stop" type="button" hidden>⑬ 停止（2秒以上長押し）</button>
 <button id="btn-to-calendar" class="sub" type="button">⑭ 記録カレンダーを見る</button>
+<button id="btn-record-back" class="sub" type="button">入口に戻る</button>
 </main>
 
 <!-- 黒画面 -->
@@ -313,8 +316,8 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 11;
-const APP_VERSION = "③ST-mock-up_V11";
+const APP_VERSION_NUMBER = 12;
+const APP_VERSION = "③ST-mock-up_V12";
 const $ = (id) => document.getElementById(id);
 
 const RECORDING_CONFIG = Object.freeze({
@@ -1019,6 +1022,8 @@ const REC = {
   ctx: null,
   stream: null,
   source: null,
+  analyser: null,
+  buf: null,
   processor: null,
   silentAudio: null,
   wakeLock: null,
@@ -1059,11 +1064,17 @@ const REC = {
     if (ctx.state !== "running") await ctx.resume();
 
     const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+
     const processor = ctx.createScriptProcessor(4096, 1, 1);
 
     REC.ctx = ctx;
     REC.stream = stream;
     REC.source = source;
+    REC.analyser = analyser;
+    REC.buf = new Float32Array(analyser.fftSize);
     REC.processor = processor;
     REC.startedAt = Date.now();
     REC.sessionId = "s_" + REC.startedAt + "_" + Math.random().toString(36).slice(2, 7);
@@ -1111,9 +1122,9 @@ const REC = {
 
     S.recording = true;
     setRecUI();
-    msg("record-status-msg", "記録中（毎秒ログを保存しています）");
+    msg("record-status-msg", "記録中（0秒）");
 
-    REC.secTimer = setInterval(() => REC.flushSecond(), 250);
+    REC.secTimer = setInterval(() => REC.tick(), 200);
   },
 
   startKeepAlive() {
@@ -1128,10 +1139,20 @@ const REC = {
     } catch (ignored) {}
   },
 
-  flushSecond() {
+  tick() {
     if (!S.recording) return;
+
+    /* ScriptProcessorが動かない環境向けのフォールバック */
+    if (REC.analyser && REC.buf) {
+      const db = levelDb(REC.analyser, REC.buf);
+      if (db > REC.secPeakDb) REC.secPeakDb = db;
+      REC.secSampleCount += 1;
+    }
+
     const currentSec = Math.floor((Date.now() - REC.startedAt) / 1000);
     if (currentSec <= REC.lastSec) return;
+
+    msg("record-status-msg", "記録中（" + currentSec + "秒）");
 
     const gainDb = Number(S.setup.gainDb) || 0;
     const hasAudio = REC.secSampleCount > 0 && Number.isFinite(REC.secPeakDb);
@@ -1149,7 +1170,9 @@ const REC = {
         appliedDb: isCurrent ? appliedDb : null,
         motion: sec === currentSec ? motion : null,
         status: isCurrent ? "ok" : "missing"
-      }).catch(() => {});
+      }).catch((err) => {
+        msg("record-meter-msg", describeError("毎秒ログの保存に失敗しました。", err));
+      });
     }
 
     REC.lastSec = currentSec;
@@ -1204,16 +1227,20 @@ const REC = {
     const gainDb = Number(S.setup.gainDb) || 0;
     const calDb = Number(S.setup.calDb) || 0;
 
-    await DB.putRecord("sessions", {
-      id: REC.sessionId,
-      startedAt: REC.startedAt,
-      endedAt,
-      status: "completed",
-      sampleRate: RECORDING_CONFIG.sampleRate,
-      gainDb,
-      calDb,
-      failureCount: DB.failureCount
-    }).catch(() => {});
+    try {
+      await DB.putRecord("sessions", {
+        id: REC.sessionId,
+        startedAt: REC.startedAt,
+        endedAt,
+        status: "completed",
+        sampleRate: RECORDING_CONFIG.sampleRate,
+        gainDb,
+        calDb,
+        failureCount: DB.failureCount
+      });
+    } catch (err) {
+      msg("record-meter-msg", describeError("記録の完了保存に失敗しました。", err));
+    }
 
     if (DB.failureCount > 0) {
       msg("record-status-msg", "記録を停止しました（保存に失敗したデータ：" + DB.failureCount + "件）。");
@@ -1341,6 +1368,8 @@ $("btn-setup1-next").addEventListener("click", () => {
   }
   showPage("setup2");
 });
+
+$("btn-setup1-back").addEventListener("click", () => showPage("home"));
 
 /* ===== 2ページ　入口 ===== */
 $("btn-to-scan").addEventListener("click", () => {
@@ -1646,6 +1675,8 @@ $("btn-setup-done").addEventListener("click", () => {
   showPage("record");
 });
 
+$("btn-setup2-back").addEventListener("click", () => showPage("setup1"));
+
 function longPress(element, milliseconds, callback) {
   let timer = null;
   let pointerId = null;
@@ -1672,7 +1703,7 @@ function longPress(element, milliseconds, callback) {
     }, milliseconds);
   });
 
-  for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
+  for (const eventName of ["pointerup", "pointercancel"]) {
     element.addEventListener(eventName, (event) => {
       if (event.pointerId === pointerId) cancel();
     });
@@ -1745,6 +1776,7 @@ setInterval(() => {
 }, 1000);
 
 $("btn-to-calendar").addEventListener("click", () => showPage("review"));
+$("btn-record-back").addEventListener("click", () => showPage("home"));
 
 /* ===== 見返す：カレンダー反映と詳細表示 ===== */
 function formatTime(ms) {
