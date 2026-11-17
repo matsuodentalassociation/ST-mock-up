@@ -7,13 +7,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V12</title>
+<title>③ST-mock-up_V13</title>
 
 <script>
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 12;
+  const EMBEDDED_VERSION = 13;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -130,7 +130,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V12</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V13</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -142,7 +142,7 @@ audio{width:100%}
 <video id="scan-video" playsinline muted></video>
 <div class="scan-frame">読み取りの枠</div>
 <p id="scan-msg" class="muted"></p>
-<button id="btn-scan-back" class="sub" type="button">入口に戻る</button>
+<button id="btn-scan-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 4ページ　メールから読み込む -->
@@ -152,7 +152,7 @@ audio{width:100%}
 <button id="btn-import" class="primary" type="button">取り込む</button>
 <input id="file-import" type="file" accept=".txt,.json,text/plain,application/json" hidden>
 <p id="mail-msg" class="err" hidden></p>
-<button id="btn-mail-back" class="sub" type="button">入口に戻る</button>
+<button id="btn-mail-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 5ページ　情報の確認 -->
@@ -183,7 +183,7 @@ audio{width:100%}
 <button id="btn-mic-perm" class="primary" type="button">マイクとモーションセンサーを許可</button>
 <p id="setup1-msg" class="err" hidden></p>
 <button id="btn-setup1-next" type="button" disabled>次へ</button>
-<button id="btn-setup1-back" class="sub" type="button">入口に戻る</button>
+<button id="btn-setup1-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- セッティング② -->
@@ -206,7 +206,7 @@ audio{width:100%}
 </div>
 <button id="btn-setup-done" class="primary" type="button">⑩ 完了</button>
 <p id="setup2-msg" class="err" hidden></p>
-<button id="btn-setup2-back" class="sub" type="button">セッティング①に戻る</button>
+<button id="btn-setup2-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 基準音のポップアップ -->
@@ -222,6 +222,7 @@ audio{width:100%}
 <main id="page-record" class="page" hidden>
 <h1>記録</h1>
 <div class="card">
+<div class="field"><span>基準音（あ〜）</span><b id="rec-ref-state">未録音</b></div>
 <span class="muted">マイク</span>
 <div class="bar"><i id="bar-mic3"></i></div>
 <span class="muted">体動</span>
@@ -233,7 +234,7 @@ audio{width:100%}
 <button id="btn-rec-black" class="primary" type="button" hidden>⑫ 黒画面に切り替える</button>
 <button id="btn-rec-stop" type="button" hidden>⑬ 停止（2秒以上長押し）</button>
 <button id="btn-to-calendar" class="sub" type="button">⑭ 記録カレンダーを見る</button>
-<button id="btn-record-back" class="sub" type="button">入口に戻る</button>
+<button id="btn-record-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 黒画面 -->
@@ -276,7 +277,7 @@ audio{width:100%}
 <button id="btn-delete-rec" class="danger" type="button">この記録を削除する</button>
 </section>
 <p class="muted">本アプリは診断を行うものではありません。医師の判断の参考資料とします。</p>
-<button id="btn-review-back" class="sub" type="button">記録画面に戻る</button>
+<button id="btn-review-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 共有 -->
@@ -297,7 +298,7 @@ audio{width:100%}
 <button id="sh-saved-ok" type="button" disabled>ZIPを保存できた</button>
 <button id="sh-del" class="danger" type="button" disabled>このタイムラインから音声を削除</button>
 </section>
-<button id="sh-back" class="sub" type="button">記録画面に戻る</button>
+<button id="sh-back" class="sub" type="button">戻る</button>
 </main>
 
 <!-- 共有の確認 -->
@@ -316,8 +317,8 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 12;
-const APP_VERSION = "③ST-mock-up_V12";
+const APP_VERSION_NUMBER = 13;
+const APP_VERSION = "③ST-mock-up_V13";
 const $ = (id) => document.getElementById(id);
 
 const RECORDING_CONFIG = Object.freeze({
@@ -615,7 +616,9 @@ const S = {
   lastError: null,
   bootPromise: null,
   schema: null,
-  selectedSessionId: null
+  selectedSessionId: null,
+  currentPage: null,
+  history: []
 };
 
 const PAGES = [
@@ -630,15 +633,32 @@ function msg(id, text) {
   element.hidden = !text;
 }
 
-function showPage(name) {
+function showPage(name, pushHistory = true) {
+  if (pushHistory && S.currentPage && S.currentPage !== name) {
+    S.history.push(S.currentPage);
+  }
+  S.currentPage = name;
+
   for (const page of PAGES) {
     $("page-" + page).hidden = page !== name;
   }
   if (name !== "scan") stopScan();
   if (name === "setup1") updateNextButton();
   if (name === "setup2" || name === "record") startMeterQuietly(name);
+  if (name === "record") {
+    $("rec-ref-state").textContent = S.refDone ? "保存済み" : "未録音";
+  }
   if (name === "review") refreshCalendar();
   window.scrollTo(0, 0);
+}
+
+function goBack() {
+  if (S.history.length > 0) {
+    const prev = S.history.pop();
+    showPage(prev, false);
+  } else {
+    showPage("home", false);
+  }
 }
 
 function describeError(context, error) {
@@ -1142,7 +1162,6 @@ const REC = {
   tick() {
     if (!S.recording) return;
 
-    /* ScriptProcessorが動かない環境向けのフォールバック */
     if (REC.analyser && REC.buf) {
       const db = levelDb(REC.analyser, REC.buf);
       if (db > REC.secPeakDb) REC.secPeakDb = db;
@@ -1369,7 +1388,7 @@ $("btn-setup1-next").addEventListener("click", () => {
   showPage("setup2");
 });
 
-$("btn-setup1-back").addEventListener("click", () => showPage("home"));
+$("btn-setup1-back").addEventListener("click", goBack);
 
 /* ===== 2ページ　入口 ===== */
 $("btn-to-scan").addEventListener("click", () => {
@@ -1462,7 +1481,7 @@ function stopScan() {
   $("scan-video").srcObject = null;
 }
 
-$("btn-scan-back").addEventListener("click", () => showPage("home"));
+$("btn-scan-back").addEventListener("click", goBack);
 
 function parsePayload(text) {
   if (!text) return null;
@@ -1543,7 +1562,7 @@ $("file-import").addEventListener("change", async () => {
   }
 });
 
-$("btn-mail-back").addEventListener("click", () => showPage("home"));
+$("btn-mail-back").addEventListener("click", goBack);
 
 $("btn-ok").addEventListener("click", async () => {
   if (!S.pending || S.registering) return;
@@ -1675,7 +1694,7 @@ $("btn-setup-done").addEventListener("click", () => {
   showPage("record");
 });
 
-$("btn-setup2-back").addEventListener("click", () => showPage("setup1"));
+$("btn-setup2-back").addEventListener("click", goBack);
 
 function longPress(element, milliseconds, callback) {
   let timer = null;
@@ -1776,7 +1795,7 @@ setInterval(() => {
 }, 1000);
 
 $("btn-to-calendar").addEventListener("click", () => showPage("review"));
-$("btn-record-back").addEventListener("click", () => showPage("home"));
+$("btn-record-back").addEventListener("click", goBack);
 
 /* ===== 見返す：カレンダー反映と詳細表示 ===== */
 function formatTime(ms) {
@@ -1903,7 +1922,7 @@ $("btn-to-share").addEventListener("click", () => {
   showPage("share");
 });
 
-$("btn-review-back").addEventListener("click", () => showPage("record"));
+$("btn-review-back").addEventListener("click", goBack);
 
 /* ===== 共有 ===== */
 $("sh-copy").addEventListener("click", async () => {
@@ -1934,7 +1953,7 @@ $("pick-close").addEventListener("click", () => {
   $("pick-dialog").hidden = true;
 });
 
-$("sh-back").addEventListener("click", () => showPage("record"));
+$("sh-back").addEventListener("click", goBack);
 
 window.SomnoLogMockupDiagnostics = Object.freeze({
   version: APP_VERSION,
@@ -2147,13 +2166,13 @@ async function boot() {
   if (fromLink) {
     toConfirm(fromLink);
   } else if (!S.perms) {
-    showPage("perm");
+    showPage("perm", false);
   } else if (!S.patient) {
-    showPage("home");
+    showPage("home", false);
   } else if (!S.refDone) {
-    showPage("setup1");
+    showPage("setup1", false);
   } else {
-    showPage("record");
+    showPage("record", false);
   }
 
   if (startupError) {
@@ -2164,7 +2183,7 @@ async function boot() {
 }
 
 S.bootPromise = boot().catch((error) => {
-  showPage("home");
+  showPage("home", false);
   msg("home-msg", describeError("アプリの起動処理でエラーが発生しました。", error));
 });
 </script>
