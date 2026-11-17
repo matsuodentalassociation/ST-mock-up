@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>muse モックアップv1</title>
+<title>muse モックアップv2</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -64,7 +64,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b>モックアップv1</b></div>
+<div class="field"><span>現在のバージョン</span><b>モックアップv2</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -238,7 +238,7 @@ audio{width:100%}
 
 <script>
 "use strict";
-const APP_VERSION = "モックアップv1";
+const APP_VERSION = "モックアップv2";
 const $ = (id) => document.getElementById(id);
 
 /* ===== 保存（患者情報と設定だけを端末にしまう） ===== */
@@ -247,7 +247,7 @@ const DB = {
   open() {
     if (DB.db) return Promise.resolve(DB.db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open("SomnoLogDB", 1);
+      const r = indexedDB.open("SomnoLogMockup", 1);
       r.onupgradeneeded = () => { r.result.createObjectStore("kv"); };
       r.onsuccess = () => { DB.db = r.result; res(DB.db); };
       r.onerror = () => rej(r.error);
@@ -353,13 +353,17 @@ $("btn-perm").addEventListener("click", () => {
     ? navigator.mediaDevices.getUserMedia({ audio: true, video: true })
     : Promise.reject(new Error("no media"));
   Promise.all([Promise.resolve(motionP).catch(() => "denied"), camP])
-    .then(([, stream]) => {
+    .then(async ([, stream]) => {
       stream.getTracks().forEach((t) => t.stop());
       S.perms = true;
-      return DB.put("setup", { perms: true, refDone: S.refDone });
+      const saved = await DB.put("setup", { perms: true, refDone: S.refDone }).then(() => true, () => false);
+      showPage("home");
+      if (!saved) msg("home-msg", "許可は取れましたが、設定の保存に失敗しました。次回も許可の画面が出ることがあります。");
     })
-    .then(() => showPage("home"))
-    .catch(() => msg("perm-msg", "許可が取れませんでした。ブラウザの設定を確認してください。"));
+    .catch((e) => {
+      if (e && e.name === "NotAllowedError") msg("perm-msg", "許可されませんでした。ブラウザの設定でカメラとマイクを許可してください。");
+      else msg("perm-msg", "カメラ・マイクを開けませんでした。ほかのアプリで使われていないか確認してください。");
+    });
 });
 
 /* ===== 2ページ　入口 ===== */
