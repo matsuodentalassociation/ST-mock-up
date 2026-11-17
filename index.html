@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V9</title>
+<title>③ST-mock-up_V10</title>
 
 <script>
 /*
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 9;
+  const EMBEDDED_VERSION = 10;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -131,7 +131,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V9</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V10</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -227,6 +227,7 @@ audio{width:100%}
 <div class="bar"><i id="bar-motion3"></i></div>
 </div>
 <p id="record-meter-msg" class="err" hidden></p>
+<p id="record-status-msg" class="muted" hidden></p>
 <button id="btn-rec-start" class="primary" type="button">⑪ 記録開始</button>
 <button id="btn-rec-black" class="primary" type="button" hidden>⑫ 黒画面に切り替える</button>
 <button id="btn-rec-stop" type="button" hidden>⑬ 停止（2秒以上長押し）</button>
@@ -313,8 +314,8 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 9;
-const APP_VERSION = "③ST-mock-up_V9";
+const APP_VERSION_NUMBER = 10;
+const APP_VERSION = "③ST-mock-up_V10";
 const $ = (id) => document.getElementById(id);
 
 /* 検知の定数は手順書の現行値を一か所に置く */
@@ -441,6 +442,12 @@ const DB = {
         throw makeError("AppStoreSchemaError", "appkvのkeyPathが想定と異なります。");
       }
       store.put(value, key);
+    });
+  },
+
+  putRecord(storeName, value) {
+    return DB.run(storeName, "readwrite", (tx) => {
+      tx.objectStore(storeName).put(value);
     });
   },
 
@@ -694,6 +701,8 @@ const METER = {
   motionListening: false,
   motionSeen: false,
   motionPct: 0,
+  motionLatestG: 0,
+  motionSecMaxG: 0,
   grav: { x: 0, y: 0, z: 0 },
   busy: false,
   loopStarted: false,
@@ -788,6 +797,11 @@ function onMotion(event) {
   if (!hasData) return;
 
   const magnitude = Math.sqrt(x * x + y * y + z * z);
+  METER.motionLatestG = magnitude / 9.80665;
+  if (METER.motionLatestG > METER.motionSecMaxG) {
+    METER.motionSecMaxG = METER.motionLatestG;
+  }
+
   const pct = clamp(magnitude / 1.5 * 100, 0, 100);
   if (pct > METER.motionPct) METER.motionPct = pct;
   METER.motionSeen = true;
@@ -980,6 +994,222 @@ function setSetup2Busy(busy) {
   $("btn-ref-rec").disabled = busy;
   $("btn-setup-done").disabled = busy;
 }
+
+/* =========================================================
+ * 段階3：録音エンジン（WebAudio 16000Hz・毎秒数値ログ・体動・無音再生・Wake Lock）
+ * ========================================================= */
+const REC = {
+  sessionId: null,
+  startedAt: 0,
+  ctx: null,
+  stream: null,
+  source: null,
+  processor: null,
+  silentAudio: null,
+  wakeLock: null,
+  secTimer: null,
+  lastSec: -1,
+  secPeakDb: -Infinity,
+  secSampleCount: 0,
+  stopping: false,
+
+  async start() {
+    if (S.recording || REC.stopping) return;
+    msg("record-meter-msg", "");
+    msg("record-status-msg", "録音を開始しています...");
+
+    DB.failureCount = 0;
+    DB.lastFailure = null;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw makeError("AudioUnsupported", "この端末では録音できません。");
+    }
+
+    let ctx;
+    try {
+      ctx = new AudioCtx({ sampleRate: RECORDING_CONFIG.sampleRate });
+    } catch (ignored) {
+      ctx = new AudioCtx();
+    }
+    if (ctx.state !== "running") await ctx.resume();
+
+    const source = ctx.createMediaStreamSource(stream);
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+
+    REC.ctx = ctx;
+    REC.stream = stream;
+    REC.source = source;
+    REC.processor = processor;
+    REC.startedAt = Date.now();
+    REC.sessionId = "s_" + REC.startedAt + "_" + Math.random().toString(36).slice(2, 7);
+    REC.lastSec = -1;
+    REC.secPeakDb = -Infinity;
+    REC.secSampleCount = 0;
+    METER.motionSecMaxG = 0;
+
+    const gainDb = Number(S.setup.gainDb) || 0;
+    const calDb = Number(S.setup.calDb) || 0;
+
+    await DB.putRecord("sessions", {
+      id: REC.sessionId,
+      startedAt: REC.startedAt,
+      endedAt: null,
+      status: "recording",
+      sampleRate: ctx.sampleRate,
+      gainDb,
+      calDb,
+      failureCount: 0
+    });
+
+    processor.onaudioprocess = (event) => {
+      if (!S.recording) return;
+      const input = event.inputBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < input.length; i++) {
+        sum += input[i] * input[i];
+      }
+      const db = 20 * Math.log10(Math.sqrt(sum / input.length) + 1e-9);
+      if (db > REC.secPeakDb) REC.secPeakDb = db;
+      REC.secSampleCount += 1;
+      METER.micPct = clamp((db + 80) / 60 * 100, 0, 100);
+    };
+
+    source.connect(processor);
+    processor.connect(ctx.destination);
+
+    /* 黒画面中の停止を防ぐ：無音ループ再生 ＋ Wake Lock */
+    REC.startKeepAlive();
+    if ("wakeLock" in navigator) {
+      try {
+        REC.wakeLock = await navigator.wakeLock.request("screen");
+      } catch (ignored) {}
+    }
+
+    S.recording = true;
+    setRecUI();
+    msg("record-status-msg", "記録中（毎秒ログを保存しています）");
+
+    REC.secTimer = setInterval(() => REC.flushSecond(), 250);
+  },
+
+  startKeepAlive() {
+    try {
+      const audio = new Audio(
+        "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
+      );
+      audio.loop = true;
+      audio.volume = 0.01;
+      audio.play().catch(() => {});
+      REC.silentAudio = audio;
+    } catch (ignored) {}
+  },
+
+  flushSecond() {
+    if (!S.recording) return;
+    const currentSec = Math.floor((Date.now() - REC.startedAt) / 1000);
+    if (currentSec <= REC.lastSec) return;
+
+    const gainDb = Number(S.setup.gainDb) || 0;
+    const hasAudio = REC.secSampleCount > 0 && Number.isFinite(REC.secPeakDb);
+    const rawDb = hasAudio ? REC.secPeakDb : null;
+    const appliedDb = hasAudio ? REC.secPeakDb + gainDb : null;
+    const motion = METER.motionSeen ? METER.motionSecMaxG : null;
+
+    for (let sec = REC.lastSec + 1; sec <= currentSec; sec++) {
+      const isCurrent = sec === currentSec && hasAudio;
+      DB.putRecord("secs", {
+        sessionId: REC.sessionId,
+        sec,
+        at: REC.startedAt + sec * 1000,
+        rawDb: isCurrent ? rawDb : null,
+        appliedDb: isCurrent ? appliedDb : null,
+        motion: sec === currentSec ? motion : null,
+        status: isCurrent ? "ok" : "missing"
+      }).catch(() => {});
+    }
+
+    REC.lastSec = currentSec;
+    REC.secPeakDb = -Infinity;
+    REC.secSampleCount = 0;
+    METER.motionSecMaxG = 0;
+  },
+
+  async stop() {
+    if (!S.recording || REC.stopping) return;
+    REC.stopping = true;
+    S.recording = false;
+
+    if (REC.secTimer !== null) {
+      clearInterval(REC.secTimer);
+      REC.secTimer = null;
+    }
+
+    if (REC.processor) {
+      REC.processor.disconnect();
+      REC.processor.onaudioprocess = null;
+      REC.processor = null;
+    }
+    if (REC.source) {
+      REC.source.disconnect();
+      REC.source = null;
+    }
+    if (REC.stream) {
+      REC.stream.getTracks().forEach((t) => t.stop());
+      REC.stream = null;
+    }
+    if (REC.ctx) {
+      await REC.ctx.close().catch(() => {});
+      REC.ctx = null;
+    }
+    if (REC.silentAudio) {
+      REC.silentAudio.pause();
+      REC.silentAudio = null;
+    }
+    if (REC.wakeLock) {
+      await REC.wakeLock.release().catch(() => {});
+      REC.wakeLock = null;
+    }
+
+    exitBlackScreen();
+    setRecUI();
+    msg("record-status-msg", "保存の完了を待っています...");
+
+    await DB.waitForWrites();
+
+    const endedAt = Date.now();
+    const gainDb = Number(S.setup.gainDb) || 0;
+    const calDb = Number(S.setup.calDb) || 0;
+
+    await DB.putRecord("sessions", {
+      id: REC.sessionId,
+      startedAt: REC.startedAt,
+      endedAt,
+      status: "completed",
+      sampleRate: RECORDING_CONFIG.sampleRate,
+      gainDb,
+      calDb,
+      failureCount: DB.failureCount
+    }).catch(() => {});
+
+    if (DB.failureCount > 0) {
+      msg("record-status-msg", "記録を停止しました（保存に失敗したデータ：" + DB.failureCount + "件）。");
+    } else {
+      msg("record-status-msg", "記録を停止し、保存を完了しました（" + (REC.lastSec + 1) + "秒）。");
+    }
+
+    REC.stopping = false;
+  }
+};
 
 /* ===== 1ページ　許可 ===== */
 $("btn-perm").addEventListener("click", () => {
@@ -1476,22 +1706,26 @@ function exitBlackScreen() {
   }
 }
 
-/* ===== 記録（UIのみ。録音の保存は次の段階で接続） ===== */
+/* ===== 記録 ===== */
 function setRecUI() {
   $("btn-rec-start").hidden = S.recording;
   $("btn-rec-black").hidden = !S.recording;
   $("btn-rec-stop").hidden = !S.recording;
 }
 
-$("btn-rec-start").addEventListener("click", () => {
-  S.recording = true;
-  setRecUI();
+$("btn-rec-start").addEventListener("click", async () => {
+  try {
+    await REC.start();
+  } catch (error) {
+    msg("record-meter-msg", describeError("録音を開始できませんでした。", error));
+    msg("record-status-msg", "");
+  }
 });
 
 longPress($("btn-rec-stop"), 2000, () => {
-  S.recording = false;
-  exitBlackScreen();
-  setRecUI();
+  REC.stop().catch((error) => {
+    msg("record-meter-msg", describeError("録音の停止処理でエラーが起きました。", error));
+  });
 });
 
 function refreshBlackClock() {
