@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>③ST-mock-up_V6</title>
+<title>③ST-mock-up_V7</title>
 
 <script>
 /*
@@ -16,7 +16,7 @@
 (function () {
   "use strict";
 
-  const EMBEDDED_VERSION = 6;
+  const EMBEDDED_VERSION = 7;
   const PACKAGE_KEY = "SomnoLogMockup.appPackage.v1";
 
   if (window.__SOMNO_MOCKUP_APPLIED__) return;
@@ -67,7 +67,6 @@ h2{font-size:16px;margin:4px 0}
 p{margin:4px 0;line-height:1.6}
 .muted{color:#9aa5b1;font-size:13px}
 .err{color:#ff8a80;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
-.ok{color:#9be59b;font-size:14px;white-space:pre-wrap}
 .card{background:#12181f;border:1px solid #232d38;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
 button{font:inherit;font-size:16px;padding:12px;border-radius:10px;border:1px solid #2a3643;background:#1b242e;color:#e8eef4;cursor:pointer;width:100%}
 button.primary{padding:16px;font-size:17px;background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}
@@ -112,7 +111,7 @@ audio{width:100%}
 <button id="btn-to-mail" type="button">③ メールの情報を読み込む</button>
 <button id="btn-start" type="button">④ 睡眠記録を始める</button>
 <div class="card">
-<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V6</b></div>
+<div class="field"><span>現在のバージョン</span><b id="app-version">③ST-mock-up_V7</b></div>
 <button id="btn-update" class="sub" type="button">アプリの更新</button>
 </div>
 <p id="home-msg" class="err" hidden></p>
@@ -180,6 +179,7 @@ audio{width:100%}
 <button id="btn-ref-rec" class="primary" type="button">⑧ 基準音を録る</button>
 <button id="btn-ref-play" type="button" disabled>⑨ 基準音を聞く</button>
 <p id="ref-msg" class="muted" hidden></p>
+<audio id="ref-audio" controls hidden></audio>
 <div class="card">
 <span class="muted">音圧調整</span>
 <input id="gain-slider" type="range" min="-9" max="18" step="1" value="0">
@@ -293,11 +293,11 @@ audio{width:100%}
 "use strict";
 
 const APP_ID = "SomnoLogMockup";
-const APP_VERSION_NUMBER = 6;
-const APP_VERSION = "③ST-mock-up_V6";
+const APP_VERSION_NUMBER = 7;
+const APP_VERSION = "③ST-mock-up_V7";
 const $ = (id) => document.getElementById(id);
 
-/* 検知の定数は手順書の現行値を一か所に置く（録音はまだ未接続） */
+/* 検知の定数は手順書の現行値を一か所に置く */
 const RECORDING_CONFIG = Object.freeze({
   sampleRate: 16000,
   calibrationSeconds: 300,
@@ -311,10 +311,11 @@ const RECORDING_CONFIG = Object.freeze({
   referenceMinimumDb: -60
 });
 
-/* ===== 保存：既存のkvには触れず、appkvを使う（V5と同じ） ===== */
+const REQUIRED_STORES = ["appkv", "sessions", "secs", "events", "clips"];
+
+/* ===== 保存（DB）：版番号は指定せず、既存の版に合わせて開く ===== */
 const DB = {
   name: "SomnoLogMockup",
-  version: 3,
   db: null,
   opening: null,
   failureCount: 0,
@@ -325,51 +326,23 @@ const DB = {
     if (DB.db) return Promise.resolve(DB.db);
     if (DB.opening) return DB.opening;
 
-    DB.opening = new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        reject(makeError("IndexedDBUnavailable", "IndexedDBを使用できません。"));
-        return;
+    if (!window.indexedDB) {
+      return Promise.reject(makeError("IndexedDBUnavailable", "IndexedDBを使用できません。"));
+    }
+
+    DB.opening = (async () => {
+      let database = await openDatabase(null);
+
+      const missing = REQUIRED_STORES.some((name) => !database.objectStoreNames.contains(name));
+      if (missing) {
+        const next = database.version + 1;
+        database.close();
+        database = await openDatabase(next);
       }
 
-      const request = indexedDB.open(DB.name, DB.version);
-
-      const timer = setTimeout(() => {
-        reject(makeError(
-          "DatabaseOpenTimeout",
-          "DBを開く処理が15秒以内に完了しませんでした。ほかのタブを閉じて再度お試しください。"
-        ));
-      }, 15000);
-
-      request.onupgradeneeded = () => {
-        try {
-          migrate(request.result, request.transaction);
-        } catch (error) {
-          try { request.transaction.abort(); } catch (ignored) {}
-        }
-      };
-
-      request.onblocked = () => {
-        console.warn("DBの版更新が、ほかのタブの接続で待機しています。");
-      };
-
-      request.onerror = () => {
-        clearTimeout(timer);
-        reject(request.error || makeError("DatabaseOpenError", "DBを開けませんでした。"));
-      };
-
-      request.onsuccess = () => {
-        clearTimeout(timer);
-        const database = request.result;
-
-        database.onversionchange = () => {
-          database.close();
-          if (DB.db === database) DB.db = null;
-        };
-
-        DB.db = database;
-        resolve(database);
-      };
-    });
+      DB.db = database;
+      return database;
+    })();
 
     const clear = () => { DB.opening = null; };
     DB.opening.then(clear, clear);
@@ -487,6 +460,50 @@ const DB = {
   }
 };
 
+function openDatabase(version) {
+  return new Promise((resolve, reject) => {
+    const request = version
+      ? indexedDB.open(DB.name, version)
+      : indexedDB.open(DB.name);
+
+    const timer = setTimeout(() => {
+      reject(makeError(
+        "DatabaseOpenTimeout",
+        "DBを開く処理が15秒以内に完了しませんでした。ほかのタブを閉じて再度お試しください。"
+      ));
+    }, 15000);
+
+    request.onupgradeneeded = () => {
+      try {
+        migrate(request.result, request.transaction);
+      } catch (error) {
+        try { request.transaction.abort(); } catch (ignored) {}
+      }
+    };
+
+    request.onblocked = () => {
+      console.warn("DBの版更新が、ほかのタブの接続で待機しています。");
+    };
+
+    request.onerror = () => {
+      clearTimeout(timer);
+      reject(request.error || makeError("DatabaseOpenError", "DBを開けませんでした。"));
+    };
+
+    request.onsuccess = () => {
+      clearTimeout(timer);
+      const database = request.result;
+
+      database.onversionchange = () => {
+        database.close();
+        if (DB.db === database) DB.db = null;
+      };
+
+      resolve(database);
+    };
+  });
+}
+
 /* 既存のストアは変更せず、不足分だけ作る */
 function migrate(database, transaction) {
   if (!database.objectStoreNames.contains("kv")) {
@@ -580,7 +597,7 @@ function describeError(context, error) {
     "版：" + APP_VERSION,
     "エラー名：" + name,
     "詳細：" + detail,
-    "DB：" + DB.name + "（指定版 " + DB.version + "）",
+    "DB：" + DB.name,
     "保存領域：" + stores
   ];
 
@@ -644,7 +661,7 @@ async function loadSetup() {
 }
 
 /* =========================================================
- * マイクとモーションの計測（バー表示だけ。保存はしない）
+ * マイクとモーションの計測（バー表示）
  * ========================================================= */
 const METER = {
   ctx: null,
@@ -662,8 +679,19 @@ const METER = {
   motionTimer: null
 };
 
+/* 基準音の録音の設定 */
+const REF = {
+  busy: false,
+  url: null,
+  seconds: 2.5
+};
+
 function clamp(value, low, high) {
   return Math.min(high, Math.max(low, value));
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function mediaErrorText(label, error) {
@@ -680,7 +708,7 @@ function mediaErrorText(label, error) {
   return label + "\n" + name + "\n" + detail + (hints[name] ? "\n" + hints[name] : "");
 }
 
-/* マイク：処理（エコー除去・ノイズ抑制・自動ゲイン）は全てオフ */
+/* マイク：エコー除去・ノイズ抑制・自動ゲインは全てオフ */
 async function startMic() {
   if (METER.stream) return;
 
@@ -714,7 +742,7 @@ async function startMic() {
   }
 }
 
-/* モーション：重力を除いた動きの大きさ（m/s²） */
+/* モーション：重力を除いた動きの大きさ */
 function onMotion(event) {
   const a = event.acceleration;
   const g = event.accelerationIncludingGravity;
@@ -763,7 +791,6 @@ function startMotionListening() {
   }, 4000);
 }
 
-/* 画面に表示する：全てのバーを同じ値で動かす */
 function renderBars() {
   const mic = METER.micPct + "%";
   const motion = METER.motionPct + "%";
@@ -779,15 +806,16 @@ function renderBars() {
   }
 }
 
+function levelDb(analyser, buffer) {
+  analyser.getFloatTimeDomainData(buffer);
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
+  return 20 * Math.log10(Math.sqrt(sum / buffer.length) + 1e-9);
+}
+
 function tickMeter() {
   if (METER.analyser && METER.buf) {
-    METER.analyser.getFloatTimeDomainData(METER.buf);
-
-    let sum = 0;
-    for (let i = 0; i < METER.buf.length; i++) sum += METER.buf[i] * METER.buf[i];
-
-    const rms = Math.sqrt(sum / METER.buf.length);
-    const db = 20 * Math.log10(rms + 1e-9);
+    const db = levelDb(METER.analyser, METER.buf);
     METER.micPct = clamp((db + 80) / 60 * 100, 0, 100);
   }
 
@@ -806,12 +834,12 @@ function updateNextButton() {
   $("btn-setup1-next").disabled = !METER.micOk;
 }
 
-/* 画面を開いた時、許可済みなら黙って計測を再開する。許可を求めない。 */
+/* 画面を開いた時、許可済みなら黙って計測を再開する。許可は求めない。 */
 async function startMeterQuietly(page) {
   const target = page === "record" ? "record-meter-msg" : "setup2-meter-msg";
 
   try {
-    if (!METER.stream && METER.micOk === false && S.perms) {
+    if (!METER.stream && S.perms) {
       await startMic();
     }
     if (!METER.motionListening && typeof window.DeviceMotionEvent !== "undefined" &&
@@ -822,6 +850,85 @@ async function startMeterQuietly(page) {
   } catch (error) {
     msg(target, mediaErrorText("計測を再開できませんでした。セッティング①で許可し直してください。", error));
   }
+}
+
+/* ===== 基準音の録音：マイクから2.5秒録り、音量を測って保存する ===== */
+async function recordReference() {
+  if (!METER.stream || !METER.analyser) {
+    throw makeError("MicNotReady", "マイクが許可されていません。セッティング①で「マイクとモーションセンサーを許可」を押してください。");
+  }
+
+  const track = METER.stream.getAudioTracks()[0];
+  if (!track || track.readyState !== "live") {
+    throw makeError("MicNotReady", "マイクが使えない状態です。セッティング①で許可し直してください。");
+  }
+
+  if (typeof window.MediaRecorder === "undefined") {
+    throw makeError("RecorderUnsupported", "この端末では録音機能を使えません。");
+  }
+
+  const candidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+  const mimeType = candidates.find((type) =>
+    MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)
+  ) || "";
+
+  const recorder = new MediaRecorder(METER.stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  let recorderError = null;
+
+  recorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) chunks.push(event.data);
+  };
+  recorder.onerror = (event) => {
+    recorderError = event.error || makeError("RecorderError", "録音中にエラーが起きました。");
+  };
+
+  const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+
+  const buffer = new Float32Array(METER.analyser.fftSize);
+  let peakDb = -Infinity;
+  let sumDb = 0;
+  let count = 0;
+
+  const sampler = setInterval(() => {
+    const db = levelDb(METER.analyser, buffer);
+    peakDb = Math.max(peakDb, db);
+    sumDb += db;
+    count += 1;
+  }, 100);
+
+  try {
+    recorder.start(250);
+    await wait(REF.seconds * 1000);
+    recorder.stop();
+    await stopped;
+  } finally {
+    clearInterval(sampler);
+  }
+
+  if (recorderError) throw recorderError;
+
+  const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+  if (!blob.size) {
+    throw makeError("EmptyRecording", "録音データが空でした。マイクを確認してください。");
+  }
+
+  if (peakDb < RECORDING_CONFIG.referenceMinimumDb) {
+    throw makeError("ReferenceTooQuiet", "音が小さすぎます。スマートフォンを顔から少し離して、「あ〜」と声を出してもう一度押してください。");
+  }
+
+  return {
+    blob,
+    type: blob.type,
+    seconds: REF.seconds,
+    peakDb,
+    averageDb: sumDb / Math.max(count, 1)
+  };
+}
+
+function setSetup2Busy(busy) {
+  $("btn-ref-rec").disabled = busy;
+  $("btn-setup-done").disabled = busy;
 }
 
 /* ===== 1ページ　許可 ===== */
@@ -881,10 +988,6 @@ $("btn-mic-perm").addEventListener("click", () => {
   $("btn-mic-perm").disabled = true;
   msg("setup1-msg", "");
 
-  /*
-   * iPhoneのモーション許可は、押した瞬間に同期的に出す必要がある。
-   * AudioContextも押した直後に作る。
-   */
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (AudioCtx && !METER.ctx) {
     try { METER.ctx = new AudioCtx(); } catch (ignored) { METER.ctx = null; }
@@ -928,13 +1031,7 @@ $("btn-mic-perm").addEventListener("click", () => {
       }
 
       startLoop();
-
-      if (problems.length) {
-        msg("setup1-msg", problems.join("\n\n"));
-      } else {
-        msg("setup1-msg", "");
-      }
-
+      msg("setup1-msg", problems.join("\n\n"));
       updateNextButton();
     })
     .finally(() => {
@@ -1174,33 +1271,69 @@ $("btn-ng").addEventListener("click", () => {
   showPage("perm");
 });
 
-/* ===== セッティング②：基準音の録音は段階2で接続（今は画面の動作のみ） ===== */
-$("btn-ref-rec").addEventListener("click", () => {
-  if ($("btn-ref-rec").disabled) return;
+/* ===== セッティング①→②：次へ ===== */
+$("btn-setup1-next").addEventListener("click", () => showPage("setup2"));
 
-  $("btn-ref-rec").disabled = true;
-  $("btn-setup-done").disabled = true;
-  $("ref-dialog").hidden = false;
+/* ===== セッティング②：基準音を録る ===== */
+$("btn-ref-rec").addEventListener("click", async () => {
+  if (REF.busy) return;
+
+  REF.busy = true;
+  setSetup2Busy(true);
   msg("setup2-msg", "");
+  msg("ref-msg", "");
+  $("ref-dialog").hidden = false;
 
-  setTimeout(async () => {
+  try {
+    const result = await recordReference();
     $("ref-dialog").hidden = true;
 
-    try {
-      await saveSetup({ perms: S.perms, refDone: true });
-      S.refDone = true;
-      $("btn-ref-play").disabled = false;
-    } catch (error) {
-      msg("setup2-msg", describeError("基準音の設定を保存できませんでした。", error));
-    } finally {
-      $("btn-ref-rec").disabled = false;
-      $("btn-setup-done").disabled = false;
+    await DB.putApp("referenceAudio", {
+      blob: result.blob,
+      type: result.type,
+      seconds: result.seconds,
+      peakDb: result.peakDb,
+      averageDb: result.averageDb,
+      savedAt: Date.now()
+    });
+
+    const readBack = await DB.getApp("referenceAudio");
+    if (!readBack || !readBack.blob || readBack.blob.size !== result.blob.size) {
+      throw makeError("ReferenceReadbackError", "保存した基準音を読み戻せませんでした。");
     }
-  }, 2500);
+
+    await saveSetup({ perms: S.perms, refDone: true, refPeakDb: result.peakDb });
+    S.refDone = true;
+    $("btn-ref-play").disabled = false;
+    msg("ref-msg", "基準音を保存しました。「⑨ 基準音を聞く」で確認できます。");
+  } catch (error) {
+    msg("setup2-msg", describeError("基準音を録れませんでした。", error));
+  } finally {
+    $("ref-dialog").hidden = true;
+    REF.busy = false;
+    setSetup2Busy(false);
+  }
 });
 
-$("btn-ref-play").addEventListener("click", () => {
-  msg("ref-msg", "基準音はまだ入っていません。");
+/* ===== セッティング②：基準音を聞く ===== */
+$("btn-ref-play").addEventListener("click", async () => {
+  try {
+    const saved = await DB.getApp("referenceAudio");
+    if (!saved || !saved.blob) {
+      msg("ref-msg", "基準音はまだ入っていません。");
+      return;
+    }
+
+    if (REF.url) URL.revokeObjectURL(REF.url);
+    REF.url = URL.createObjectURL(saved.blob);
+
+    const audio = $("ref-audio");
+    audio.src = REF.url;
+    audio.hidden = false;
+    msg("ref-msg", "下の再生ボタンで聞けます。");
+  } catch (error) {
+    msg("ref-msg", describeError("基準音を再生できませんでした。", error));
+  }
 });
 
 $("gain-slider").addEventListener("change", async () => {
@@ -1263,7 +1396,7 @@ function longPress(element, milliseconds, callback) {
   });
 }
 
-/* ===== 記録（UIのみ。録音の保存は段階3で接続） ===== */
+/* ===== 記録（UIのみ。録音の保存は次の段階で接続） ===== */
 function setRecUI() {
   $("btn-rec-start").hidden = S.recording;
   $("btn-rec-black").hidden = !S.recording;
@@ -1302,7 +1435,7 @@ setInterval(() => {
 
 $("btn-to-calendar").addEventListener("click", () => showPage("review"));
 
-/* ===== 見返す：枠のみ（段階7で接続） ===== */
+/* ===== 見返す：枠のみ ===== */
 (function buildCalendar() {
   const grid = $("cal-grid");
   const now = new Date();
@@ -1327,7 +1460,7 @@ $("btn-to-share").addEventListener("click", () => {
 
 $("btn-review-back").addEventListener("click", () => showPage("record"));
 
-/* ===== 共有：枠のみ（段階8で接続） ===== */
+/* ===== 共有：枠のみ ===== */
 $("sh-copy").addEventListener("click", async () => {
   const address = (S.patient && S.patient.logShareEmail) || "";
 
@@ -1448,7 +1581,7 @@ function validateUpdateHTML(html) {
 async function updateApp() {
   if (S.updating) return;
 
-  if (S.recording || S.registering) {
+  if (S.recording || S.registering || REF.busy) {
     msg("home-msg", "記録や登録の処理が終わってから更新してください。");
     return;
   }
@@ -1542,7 +1675,6 @@ async function boot() {
     if (setup && typeof setup === "object") {
       S.setup = { ...setup };
       S.perms = !!setup.perms;
-      S.refDone = !!setup.refDone;
 
       const gainDb = Number(setup.gainDb);
       if (Number.isFinite(gainDb)) {
@@ -1553,13 +1685,22 @@ async function boot() {
     if (!startupError) startupError = error;
   }
 
+  /* 基準音の音声が実際に保存されている時だけ「基準音済み」とみなす */
+  try {
+    const reference = await DB.getApp("referenceAudio");
+    S.refDone = !!(reference && reference.blob && reference.blob.size > 0);
+  } catch (error) {
+    S.refDone = false;
+    if (!startupError) startupError = error;
+  }
+
   try {
     S.patient = await loadPatient();
   } catch (error) {
     if (!startupError) startupError = error;
   }
 
-  if (S.refDone) $("btn-ref-play").disabled = false;
+  $("btn-ref-play").disabled = !S.refDone;
 
   const fromLink = parsePayload(location.hash || "");
 
