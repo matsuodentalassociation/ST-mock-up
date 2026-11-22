@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#000000">
 <meta http-equiv="Cache-Control" content="no-cache">
 <script>
-/* 起動直後の入れ替え（V414）：端末に保存された新しい版があれば、開かれたページの版より先にそちらを動かす。
+/* 起動直後の入れ替え（V415）：端末に保存された新しい版があれば、開かれたページの版より先にそちらを動かす。
    これで「アプリの更新」は公開ページ（Pages）の反映を待たずに、最新版を直接読み込める。
    ここの数字は、このファイルの APP_VERSION と必ず一致させること（版上げ時の確認項目）。
    住所に safe=1 が付いている時は、保存した版を捨てて、開かれたページの版で開く（開けなくなった時の逃げ道）。 */
@@ -18,7 +18,7 @@
       return;
     }
     var v = parseInt(localStorage.getItem("sl_boot_ver") || "0", 10);
-    if (v > 414) {
+    if (v > 415) {
       var h = localStorage.getItem("sl_boot_html");
       if (h && h.indexOf("</html>") >= 0) {
         document.open();
@@ -29,7 +29,7 @@
   } catch (e) { /* 失敗したら、開かれたページの版のまま続ける */ }
 })();
 </script>
-<title>SomnoLog V414 基準音圧版</title>
+<title>SomnoLog V415 基準音圧版</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -121,7 +121,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 1-1 起動・QR読み取り -->
 <main id="page-start" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V414</h1>
+    <h1 class="app-name">SomnoLog V415</h1>
     <span class="tag">患者情報確認</span>
   </header>
 
@@ -178,7 +178,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録画面 -->
 <main id="page-record" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V414</h1>
+    <h1 class="app-name">SomnoLog V415</h1>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="rec-back" class="sub mini" type="button">戻る</button>
       <span id="rec-badge" class="tag">待機中</span>
@@ -208,7 +208,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録の準備 -->
 <main id="page-prep" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V414</h1>
+    <h1 class="app-name">SomnoLog V415</h1>
     <button id="prep-back" class="sub mini" type="button">戻る</button>
   </header>
   <button id="prep-usage-btn" class="warnbtn">使い方を見る</button>
@@ -236,6 +236,9 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <label class="muted">音圧調整（基準音が小さい場合にマイク感度を上げます）</label>
     <input id="gain" type="range" min="-9" max="18" step="1" value="0">
     <p class="muted">調整をした後、基準音を測り直してください。</p>
+    <div class="kv"><span>検出閾値</span><b id="loud-val">環境音基準 + 10 dB</b></div>
+    <input id="loud-db" type="range" min="3" max="20" step="1" value="10">
+    <p class="muted">この値を超えた音を録音します。拾いすぎる場合は右へ、拾わない場合は左へ調整してください。</p>
   </section>
 
   <section class="card">
@@ -400,15 +403,12 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 
 <script>
 /* ===== 旧エンジン記録の読み取り（SleepEngine） ===== */
-/* V63〜V100のエンジン方式で録られた過去の記録を、読む・聴く・ZIPで出す・
-   消すためだけに残した読み取り専用の置き場。公開名は SleepEngine のみ。
-   V101から録音はシェル側の方式に一本化し、ここでは新しい記録は作らない。 */
 const SleepEngine = (() => {
   "use strict";
   const ENGINE_VERSION = 68;
   const SCHEMA_VERSION = 35;
   const C = {
-    DB_NAME: "somnolog-v63",   // 旧エンジン記録の保存領域（V101以降は読み取り専用）
+    DB_NAME: "somnolog-v63",
     DB_VERSION: 1
   };
 
@@ -416,7 +416,6 @@ const SleepEngine = (() => {
   const r1 = (v) => Math.round(v * 10) / 10;
   const enc = new TextEncoder();
 
-  /* ---------- IndexedDB ---------- */
   let dbp = null;
   const ENGINE_SCHEMA = [
     ["sessions", "id", false],
@@ -487,7 +486,6 @@ const SleepEngine = (() => {
     }
   };
 
-  /* ---------- ZIP（無圧縮・WAVなし） ---------- */
   const CRC = (() => {
     const t = new Uint32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -552,7 +550,6 @@ const SleepEngine = (() => {
     }
   }
 
-  /* ---------- 読み取り・書き出し ---------- */
   const allRows = (s) => tx(s, "readonly", (x) => x.getAll());
 
   let scaleGate = null;
@@ -732,7 +729,7 @@ const SleepEngine = (() => {
 <script>
 "use strict";
 /* ===== バージョン ===== */
-const APP_VERSION = 414;
+const APP_VERSION = 415;
 const APP = "SomnoLogV" + APP_VERSION + "_ref";
 
 /* ===== 更新の取得元（GitHub） ===== */
@@ -748,8 +745,8 @@ const UPD_TARGET_KEY = "somnolog-update-target";
 const SR = 16000, FRAME = 512;
 const RING_SEC = 130;
 const VAD_CTX = 64, VAD_TH = 0.3;
-const LOUD_DB = 6, SEG_MIN = 0.5, SEG_MAX = 4, QUIET_FRAMES = 5;
-const PRE_MS = 3000, POST_MS = 1000;
+const LOUD_DB = 10, SEG_MIN = 0.5, SEG_MAX = 60, POST_TRIG_MS = 5000;
+const PRE_MS = 3000, POST_MS = 0;
 const CALIB_SEC = 300, BASE_EVERY = 600, POOL_MAX = 600, POOL_MIN = 60;
 const ENV_RUN_SEC = 10, ENV_DB = 6, ENV_COOLDOWN = 300, ENV_CLIP_SEC = 60;
 const FLUSH_SEC = 60, MAX_QUEUE = 40;
@@ -763,7 +760,7 @@ const VOICE_PAD = 3;
 const TAG_ORDER = ["snore", "unknown", "env", "speech"];
 const TAG_COLOR = { snore: "#4a90d9", unknown: "#ff9f43", env: "#4caf7a", speech: "#9aa5b1", motion: "#e04848" };
 const TAG_NAME = { snore: "いびき", unknown: "判定不能", env: "環境音", speech: "人声", motion: "体動" };
-const TL_BINS = 60; // タイムラインの棒の数（1本分の時間＝表示幅÷60）
+const TL_BINS = 60;
 
 /* ===== 基準音圧の設定 ===== */
 const REF_TARGET_DB = -22;
@@ -775,7 +772,7 @@ const REF_WORD_DB = 3;
 
 /* ===== タイムラインの設定 ===== */
 const TL_W = 480, TL_H = 220, TL_PL = 62, TL_PR = 8, TL_PT = 8, TL_PB = 22;
-const SAVED_BAR_COLOR = "#ffffff"; // 保存した音声の棒の色
+const SAVED_BAR_COLOR = "#ffffff";
 
 /* ===== 夜の評価 ===== */
 const ENV_QUIET_MAX = 0;
@@ -1050,6 +1047,7 @@ const S = {
   ctx: null, pendingCtx: null, stream: null, tap: null, micMode: "",
   vad: null, vadOk: true, vadState: null, vadCtx: new Float32Array(VAD_CTX),
   gainDb: 0,
+  loudDb: LOUD_DB,
   calDb: 0,
   ref: null,
   refColl: null,
@@ -1657,10 +1655,9 @@ function calcVoiceProb(d) {
       if ((x >= 0 && prev < 0) || (x < 0 && prev >= 0)) zcr++;
     }
   }
-  if (ss < 1e-7) return 0; // 無音に近い場合は人声としない
-  const zcrRate = zcr / (n - 1); // ゼロ交差率
-  const hfRatio = diffSs / ss;   // 高域成分の割合（1階差分エネルギー比）
-  // 人の声（会話・寝言）は高域成分や波形の切り替わりが多い。迷ったら人声として弾く厳しめ設定
+  if (ss < 1e-7) return 0;
+  const zcrRate = zcr / (n - 1);
+  const hfRatio = diffSs / ss;
   if (zcrRate > 0.08 || hfRatio > 0.25) return 0.85;
   return 0.05;
 }
@@ -1729,26 +1726,27 @@ function processFrame(f, p) {
   S.bucket.p.push(p);
 
   if (S.calibrated) {
-    if (lv > S.base + LOUD_DB) {
-      if (!S.cand) S.cand = { startMs: t, lastMs: t, quiet: 0, peakDb: -100, sumDb: 0, n: 0 };
+    if (lv > S.base + S.loudDb) {
+      if (!S.cand) S.cand = { startMs: t, lastMs: t, peakDb: -100, sumDb: 0, n: 0 };
       const c = S.cand;
       c.lastMs = t;
-      c.quiet = 0;
       c.peakDb = Math.max(c.peakDb, lv);
       c.sumDb += lv;
       c.n++;
-      if (t - c.startMs > SEG_MAX * 1000) { closeCand(c); S.cand = null; }
+      if (t - c.startMs > SEG_MAX * 1000) { closeCand(c, t + FRAME / SR * 1000); S.cand = null; }
     } else if (S.cand) {
-      S.cand.quiet++;
-      if (S.cand.quiet >= QUIET_FRAMES) { closeCand(S.cand); S.cand = null; }
+      if (t - S.cand.lastMs >= POST_TRIG_MS) {
+        closeCand(S.cand, t + FRAME / SR * 1000);
+        S.cand = null;
+      }
     }
   }
 
   tickPending(S.nowMs);
 }
 
-function closeCand(c) {
-  const endMs = c.lastMs + FRAME / SR * 1000;
+function closeCand(c, endMsOverride) {
+  const endMs = endMsOverride != null ? endMsOverride : (c.lastMs + FRAME / SR * 1000);
   const durMs = endMs - c.startMs;
   if (durMs < SEG_MIN * 1000) { S.counts.short++; return; }
   S.pendingCands.push({ c, endMs, durMs, due: endMs + POST_MS });
@@ -2066,6 +2064,7 @@ function setButtons() {
   $("stop-btn").disabled = !S.running;
   $("btn-enter-black").disabled = !S.running;
   $("gain").disabled = S.running || measuring;
+  $("loud-db").disabled = S.running || measuring;
   $("rec-badge").textContent = S.running ? "記録中" : "待機中";
   $("rec-badge").className = S.running ? "tag rec" : "tag";
   updateBackButtons();
@@ -3621,7 +3620,6 @@ async function openShare() {
   showPage("share");
 }
 
-// 共有の対象：いびき、および「この音声を保存する」を押した人声のみ（未保存の人声は残さない）
 async function shareScope() {
   const sess = await DB.get("sessions", SH.sid);
   const refDb = activeRef(sess).refDb;
@@ -3631,7 +3629,7 @@ async function shareScope() {
   return {
     evs,
     snores: evs.filter((e) => e.type === "snore" && e.clipId),
-    speeches: allSpeeches.filter((e) => !!e.saved), // 「この音声を保存する」を押した人声のみ記録に残す
+    speeches: allSpeeches.filter((e) => !!e.saved),
     loudUnsavedSpeeches
   };
 }
@@ -3771,7 +3769,6 @@ async function startShare() {
       shMsg("保存する音声がありません。", true);
       return;
     }
-    // 基準音以上の未保存人声がある場合のみ、計測者に確認させる
     if (sc.loudUnsavedSpeeches.length) {
       $("rv-dialog").hidden = false;
       return;
@@ -4183,6 +4180,12 @@ on("gain", "input", (e) => {
   updateUI();
 });
 
+on("loud-db", "input", (e) => {
+  S.loudDb = clamp(Number(e.target.value), 3, 20);
+  $("loud-val").textContent = "環境音基準 + " + S.loudDb + " dB";
+  try { localStorage.setItem("somnolog-loud-db", String(S.loudDb)); } catch (err) {}
+});
+
 on("ref-btn", "click", () => startRefMeasure());
 on("ref-play-btn", "click", async () => {
   const ok = await playRefAudio();
@@ -4334,6 +4337,10 @@ on("tl-cur", "input", (e) => {
 try {
   const sg = localStorage.getItem("somnolog-gain-db");
   if (sg != null) { S.gainDb = Math.max(-9, Math.min(18, Number(sg) || 0)); $("gain").value = S.gainDb; }
+} catch (e) {}
+try {
+  const sl = localStorage.getItem("somnolog-loud-db");
+  if (sl != null) { S.loudDb = clamp(Number(sl) || LOUD_DB, 3, 20); $("loud-db").value = S.loudDb; $("loud-val").textContent = "環境音基準 + " + S.loudDb + " dB"; }
 } catch (e) {}
 try {
   const sc = localStorage.getItem("somnolog-cal-db");
