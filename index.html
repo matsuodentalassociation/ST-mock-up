@@ -14,7 +14,7 @@
       return;
     }
     var v = parseInt(localStorage.getItem("sl_boot_ver") || "0", 10);
-    if (v > 418) {
+    if (v > 419) {
       var h = localStorage.getItem("sl_boot_html");
       if (h && h.indexOf("</html>") >= 0) {
         document.open();
@@ -25,7 +25,7 @@
   } catch (e) {}
 })();
 </script>
-<title>SomnoLog V418 基準音圧版</title>
+<title>SomnoLog V419 基準音圧版</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -117,7 +117,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 1-1 起動・QR読み取り -->
 <main id="page-start" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V418</h1>
+    <h1 class="app-name">SomnoLog V419</h1>
     <span class="tag">患者情報確認</span>
   </header>
 
@@ -174,7 +174,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録画面 -->
 <main id="page-record" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V418</h1>
+    <h1 class="app-name">SomnoLog V419</h1>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="rec-back" class="sub mini" type="button">戻る</button>
       <span id="rec-badge" class="tag">待機中</span>
@@ -204,7 +204,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録の準備 -->
 <main id="page-prep" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V418</h1>
+    <h1 class="app-name">SomnoLog V419</h1>
     <button id="prep-back" class="sub mini" type="button">戻る</button>
   </header>
   <button id="prep-usage-btn" class="warnbtn">使い方を見る</button>
@@ -212,7 +212,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <h2>使い方</h2>
     <ol class="steps">
       <li>「マイクを許可」を押すと、マイクとモーションセンサーの許可をまとめて取ります。</li>
-      <li>「基準音の設定」を押すと、まず2秒間静かにして環境音を測り、続けて2秒間「あいうえお」と声を出します。</li>
+      <li>「基準音の設定」を押すと、まず2秒間静かにして環境音を測り、続けて4秒間「あいうえお」と声を出します。</li>
       <li>基準音は端末に保存されるので、次回からは測らなくて大丈夫です。</li>
       <li>基準音が小さい場合は「音圧調整」でマイク感度を上げてから、基準音を測り直してください。</li>
     </ol>
@@ -240,6 +240,12 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
   <section class="card">
     <button id="ref-btn" class="primary" disabled>基準音の設定</button>
     <p id="ref-msg" class="muted">基準音が未設定です。設定すると、バーの見方が決まります。</p>
+    <div id="prep-voice-adj" hidden>
+      <div class="kv"><span>人声判定のしきい値</span><b id="pv-thresh-val">35</b></div>
+      <input id="pv-thresh" type="range" min="5" max="95" step="1" value="35">
+      <div class="kv"><span>基準の「あいうえお」の判定</span><b id="pv-ref-judge-val">-</b></div>
+      <p class="muted">スライダーを調整してから「基準音を聴く」を押して、人声として除外されるか確認してください。</p>
+    </div>
     <button id="ref-play-btn" class="sub" hidden>基準音を聴く</button>
   </section>
 
@@ -324,7 +330,11 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
       <div class="kv"><span>人声判定のしきい値</span><b id="tv-thresh-val">35</b></div>
       <input id="tv-thresh" type="range" min="5" max="95" step="1" value="35">
       <div id="tv-ref-judge" class="kv" hidden><span>基準の「あいうえお」の判定</span><b id="tv-ref-judge-val">-</b></div>
-      <p class="muted">記録した「あいうえお」が「いびき」から消えて「人声」に移る位置まで左へ動かして調整してください。</p>
+      <div class="row">
+        <button id="tv-play-ref" class="sub" type="button">基準音を再生</button>
+        <button id="tv-apply" class="primary" type="button">適用</button>
+      </div>
+      <p class="muted">スライダーを調整し「基準音を再生」で確認後、「適用」を押すとタイムラインに反映されます。</p>
     </div>
     <div id="tl-motion-adj" hidden>
       <div class="kv"><span>体動のしきい値</span><b id="tm-thresh-val">0.05 g</b></div>
@@ -732,7 +742,7 @@ const SleepEngine = (() => {
 <script>
 "use strict";
 /* ===== バージョン ===== */
-const APP_VERSION = 418;
+const APP_VERSION = 419;
 const APP = "SomnoLogV" + APP_VERSION + "_ref";
 
 /* ===== 更新の取得元（GitHub） ===== */
@@ -767,10 +777,12 @@ const TL_BINS = 60;
 
 /* ===== 基準音圧の設定 ===== */
 const REF_TARGET_DB = -22;
-const REF_SEC = 2;
+const REF_ENV_SEC = 2;
+const REF_SEC = 4;
+const REF_ENV_MIN_FRAMES = Math.floor(SR * REF_ENV_SEC / FRAME * 0.8);
 const REF_MIN_FRAMES = Math.floor(SR * REF_SEC / FRAME * 0.8);
 const REF_QUIET_DB = -60;
-const DISP_FRAMES = Math.round(SR / FRAME * REF_SEC);
+const DISP_FRAMES = Math.round(SR / FRAME * REF_ENV_SEC);
 const REF_WORD_DB = 3;
 
 /* ===== タイムラインの設定 ===== */
@@ -1576,8 +1588,8 @@ function startRefMeasure() {
   S.refPcm = [];
   S.dispWin = []; S.dispLv = -100;
   setButtons();
-  showRefMsg("静かにしてください…（環境音を" + REF_SEC + "秒測ります）");
-  setTimeout(finishRefEnv, REF_SEC * 1000);
+  showRefMsg("静かにしてください…（環境音を" + REF_ENV_SEC + "秒測ります）");
+  setTimeout(finishRefEnv, REF_ENV_SEC * 1000);
 }
 
 function halfMean(arr, upper, frac) {
@@ -1589,7 +1601,7 @@ function halfMean(arr, upper, frac) {
 
 function finishRefEnv() {
   const arr = S.refColl || [];
-  if (arr.length < REF_MIN_FRAMES) {
+  if (arr.length < REF_ENV_MIN_FRAMES) {
     refFail("音を十分に取れませんでした。もう一度「基準音の設定」を押してください。");
     return;
   }
@@ -2084,6 +2096,8 @@ function setButtons() {
     : (S.ref ? "基準音を測り直す" : "基準音の設定");
   $("ref-btn").className = S.ref && !measuring ? "sub" : "primary";
   $("ref-play-btn").hidden = !S.ref;
+  $("prep-voice-adj").hidden = !S.ref;
+  updateRefJudgeDisplay();
 
   $("start-btn").disabled = S.running || !S.ctx || !S.patient || !S.ref;
   $("stop-btn").disabled = !S.running;
@@ -2779,16 +2793,19 @@ function reclassifyByThreshold(sess, evs, th) {
 }
 
 function updateRefJudgeDisplay() {
+  const hasScore = S.ref && S.ref.voiceScore != null;
+  const isSpeech = hasScore && S.ref.voiceScore >= tl.voiceThresh;
+  const txt = hasScore ? ((isSpeech ? "人声（除外）" : "いびき（残る）") + "（スコア " + S.ref.voiceScore + "）") : "-";
+  const col = isSpeech ? "#4caf7a" : "#ff9f43";
+
+  const pvVal = $("pv-ref-judge-val");
+  if (pvVal) { pvVal.textContent = txt; if (hasScore) pvVal.style.color = col; }
+
   const box = $("tv-ref-judge");
   const val = $("tv-ref-judge-val");
-  if (!box || !val) return;
-  if (S.ref && S.ref.voiceScore != null) {
-    box.hidden = false;
-    const isSpeech = S.ref.voiceScore >= tl.voiceThresh;
-    val.textContent = (isSpeech ? "人声（除外）" : "いびき（残る）") + "（スコア " + S.ref.voiceScore + "）";
-    val.style.color = isSpeech ? "#4caf7a" : "#ff9f43";
-  } else {
-    box.hidden = true;
+  if (box && val) {
+    box.hidden = !hasScore;
+    if (hasScore) { val.textContent = txt; val.style.color = col; }
   }
 }
 
@@ -4295,6 +4312,17 @@ on("tl-ref-play", "click", async () => {
   const ok = await playRefAudio();
   if (!ok) $("tl-msg").textContent = "基準の音はまだ保存されていません。最初の画面で測り直すと保存されます。";
 });
+on("tv-play-ref", "click", async () => {
+  const ok = await playRefAudio();
+  if (!ok) $("tl-msg").textContent = "基準の音はまだ保存されていません。準備画面で測り直すと保存されます。";
+});
+on("tv-apply", "click", () => {
+  if (tl.data && !tl.data.engine) {
+    reclassifyByThreshold(tl.data.sess, tl.data.evs, tl.voiceThresh);
+    renderTimeline();
+    $("tl-msg").textContent = "人声判定のしきい値（" + tl.voiceThresh + "）を適用しました。";
+  }
+});
 
 on("prep-btn", "click", () => showPage("prep"));
 on("prep-back", "click", () => { setButtons(); showPage("record"); });
@@ -4446,23 +4474,27 @@ try {
   const sc = localStorage.getItem("somnolog-cal-db");
   if (sc != null) S.calDb = Math.max(-12, Math.min(18, Number(sc) || 0));
 } catch (e) {}
+function syncVoiceThreshUi() {
+  $("tv-thresh").value = tl.voiceThresh;
+  $("tv-thresh-val").textContent = String(tl.voiceThresh);
+  $("pv-thresh").value = tl.voiceThresh;
+  $("pv-thresh-val").textContent = String(tl.voiceThresh);
+  updateRefJudgeDisplay();
+}
 try {
   const sv = localStorage.getItem("somnolog-voice-thresh");
-  if (sv != null) {
-    tl.voiceThresh = clamp(Number(sv) || 35, 5, 95);
-    $("tv-thresh").value = tl.voiceThresh;
-    $("tv-thresh-val").textContent = String(tl.voiceThresh);
-  }
+  if (sv != null) tl.voiceThresh = clamp(Number(sv) || 35, 5, 95);
+  syncVoiceThreshUi();
 } catch (e) {}
+on("pv-thresh", "input", (e) => {
+  tl.voiceThresh = clamp(Number(e.target.value), 5, 95);
+  try { localStorage.setItem("somnolog-voice-thresh", String(tl.voiceThresh)); } catch (err) {}
+  syncVoiceThreshUi();
+});
 on("tv-thresh", "input", (e) => {
   tl.voiceThresh = clamp(Number(e.target.value), 5, 95);
-  $("tv-thresh-val").textContent = String(tl.voiceThresh);
   try { localStorage.setItem("somnolog-voice-thresh", String(tl.voiceThresh)); } catch (err) {}
-  updateRefJudgeDisplay();
-  if (tl.data && !tl.data.engine) {
-    reclassifyByThreshold(tl.data.sess, tl.data.evs, tl.voiceThresh);
-    renderTimeline();
-  }
+  syncVoiceThreshUi();
 });
 try {
   const st2 = localStorage.getItem("somnolog-motion-thresh-g");
