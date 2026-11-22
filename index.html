@@ -14,7 +14,7 @@
       return;
     }
     var v = parseInt(localStorage.getItem("sl_boot_ver") || "0", 10);
-    if (v > 417) {
+    if (v > 418) {
       var h = localStorage.getItem("sl_boot_html");
       if (h && h.indexOf("</html>") >= 0) {
         document.open();
@@ -25,7 +25,7 @@
   } catch (e) {}
 })();
 </script>
-<title>SomnoLog V417 基準音圧版</title>
+<title>SomnoLog V418 基準音圧版</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -117,7 +117,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 1-1 起動・QR読み取り -->
 <main id="page-start" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V417</h1>
+    <h1 class="app-name">SomnoLog V418</h1>
     <span class="tag">患者情報確認</span>
   </header>
 
@@ -174,7 +174,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録画面 -->
 <main id="page-record" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V417</h1>
+    <h1 class="app-name">SomnoLog V418</h1>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="rec-back" class="sub mini" type="button">戻る</button>
       <span id="rec-badge" class="tag">待機中</span>
@@ -204,7 +204,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録の準備 -->
 <main id="page-prep" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V417</h1>
+    <h1 class="app-name">SomnoLog V418</h1>
     <button id="prep-back" class="sub mini" type="button">戻る</button>
   </header>
   <button id="prep-usage-btn" class="warnbtn">使い方を見る</button>
@@ -212,7 +212,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <h2>使い方</h2>
     <ol class="steps">
       <li>「マイクを許可」を押すと、マイクとモーションセンサーの許可をまとめて取ります。</li>
-      <li>「基準音の設定」を押すと、まず2秒間静かにして環境音を測り、続けて2秒間「あ〜」と声を出します。</li>
+      <li>「基準音の設定」を押すと、まず2秒間静かにして環境音を測り、続けて2秒間「あいうえお」と声を出します。</li>
       <li>基準音は端末に保存されるので、次回からは測らなくて大丈夫です。</li>
       <li>基準音が小さい場合は「音圧調整」でマイク感度を上げてから、基準音を測り直してください。</li>
     </ol>
@@ -226,7 +226,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <div class="meter"><i id="level-bar"></i><i class="tk" style="left:25%"></i><i class="tk" style="left:50%"></i><i class="tk" style="left:75%"></i><b id="mid-line" class="mid"></b></div>
     <div id="scale-row" class="scale-row"></div>
     <div class="kv"><span>下端：環境音</span><b id="g-env">-</b></div>
-    <div class="kv"><span>白い線：「あ〜」</span><b id="g-ah">-</b></div>
+    <div class="kv"><span>白い線：「あいうえお」</span><b id="g-ah">-</b></div>
     <div class="kv"><span>上端：記録中の最大</span><b id="g-top">-</b></div>
     <div class="kv"><span id="level-text">-</span><span id="base-text">待機中</span></div>
     <label class="muted">音圧調整（基準音が小さい場合にマイク感度を上げます）</label>
@@ -295,7 +295,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <h2>使い方</h2>
     <ol class="steps">
       <li>上のボタンで「いびき」「判定不能」「環境音」「人声」を切り替えます。最初は「いびき」が選ばれています。</li>
-      <li>棒の高さは、下端が環境音、真ん中の線が「あ〜」、上端がその晩の最大音です。真ん中より上は「あ〜」より大きい音、下は小さい音です。</li>
+      <li>棒の高さは、下端が環境音、真ん中の線が「あいうえお」、上端がその晩の最大音です。真ん中より上は「あいうえお」より大きい音、下は小さい音です。</li>
       <li>黄色い線を動かして、聴きたい位置に合わせます。</li>
       <li>「タイムラインの音を聴く」を押すと、黄色い線の棒1本分の時間の音を再生します。</li>
       <li>残したい音は「この音声を保存する」を押します。保存した棒は白色になり、日付の音声削除の対象から外れます。</li>
@@ -308,6 +308,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
       <h2>タイムライン</h2>
       <select id="tl-zoom" aria-label="タイムライン圧縮">
         <option value="60">1分</option>
+        <option value="120">2分</option>
         <option value="300">5分</option>
         <option value="600">10分</option>
         <option value="1800">30分</option>
@@ -322,6 +323,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <div id="tl-voice-adj" class="card" hidden>
       <div class="kv"><span>人声判定のしきい値</span><b id="tv-thresh-val">35</b></div>
       <input id="tv-thresh" type="range" min="5" max="95" step="1" value="35">
+      <div id="tv-ref-judge" class="kv" hidden><span>基準の「あいうえお」の判定</span><b id="tv-ref-judge-val">-</b></div>
       <p class="muted">記録した「あいうえお」が「いびき」から消えて「人声」に移る位置まで左へ動かして調整してください。</p>
     </div>
     <div id="tl-motion-adj" hidden>
@@ -335,7 +337,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <label class="muted">黄色い線（時刻の位置）</label>
     <input id="tl-cur" type="range" min="0" max="0" step="1" value="0">
     <button id="tl-listen" class="primary">タイムラインの音を聴く（棒1本分）</button>
-    <button id="tl-ref-play" class="sub">基準の「あ〜」を聴く</button>
+    <button id="tl-ref-play" class="sub">基準の「あいうえお」を聴く</button>
     <div id="tl-audio"></div>
     <p id="tl-msg" class="muted"></p>
     <button id="tl-save" class="primary" disabled>この音声を保存する（残す）</button>
@@ -730,7 +732,7 @@ const SleepEngine = (() => {
 <script>
 "use strict";
 /* ===== バージョン ===== */
-const APP_VERSION = 417;
+const APP_VERSION = 418;
 const APP = "SomnoLogV" + APP_VERSION + "_ref";
 
 /* ===== 更新の取得元（GitHub） ===== */
@@ -1324,11 +1326,11 @@ async function savePatient(p) {
   await DB.put("settings", { key: "patient", value: p, savedAt: Date.now() });
 }
 
-/* ===== 基準音圧（あ〜）の保存・読み込み ===== */
+/* ===== 基準音圧（あいうえお）の保存・読み込み ===== */
 async function saveRef() {
   if (!S.ref) return;
   try {
-    await DB.put("settings", { key: "ref", value: { db: S.ref.db, envDb: S.ref.envDb, at: S.ref.at }, savedAt: Date.now() });
+    await DB.put("settings", { key: "ref", value: { db: S.ref.db, envDb: S.ref.envDb, voiceScore: S.ref.voiceScore, at: S.ref.at }, savedAt: Date.now() });
   } catch (e) { console.warn("基準音圧の保存:", e); }
 }
 
@@ -1389,7 +1391,7 @@ async function loadRef() {
     const row = await withTimeout(DB.get("settings", "ref"), DB_WAIT_MS, "基準音圧の読み込み");
     const v = row && row.value ? row.value : null;
     if (v && typeof v.db === "number") {
-      S.ref = { db: v.db, envDb: v.envDb, at: v.at || null };
+      S.ref = { db: v.db, envDb: v.envDb, voiceScore: v.voiceScore != null ? v.voiceScore : null, at: v.at || null };
     }
   } catch (e) { console.warn("基準音圧の読み込み:", e); }
 }
@@ -1558,7 +1560,7 @@ function onAudio(raw) {
   pump();
 }
 
-/* ===== 基準音圧を測る（①環境音 → ②「あ〜」） ===== */
+/* ===== 基準音圧を測る（①環境音 → ②「あいうえお」） ===== */
 function refFail(msg) {
   S.refColl = null;
   S.refPcm = null;
@@ -1594,8 +1596,33 @@ function finishRefEnv() {
   S.refEnv = round2(halfMean(arr, false));
   S.refColl = [];
   S.refPcm = [];
-  showRefMsg("「あ〜」と声を出し続けてください…（" + REF_SEC + "秒）");
+  showRefMsg("「あいうえお」と発声してください…（" + REF_SEC + "秒）");
   setTimeout(finishRefMeasure, REF_SEC * 1000);
+}
+
+function calcFloatVoiceScore(chunks) {
+  let activeFrames = 0, scoreSum = 0;
+  for (const d of chunks) {
+    let ss = 0, diffSs = 0, zcr = 0;
+    const n = d.length;
+    for (let j = 0; j < n; j++) {
+      const x = d[j];
+      ss += x * x;
+      if (j > 0) {
+        const prev = d[j - 1];
+        const df = x - prev;
+        diffSs += df * df;
+        if ((x >= 0 && prev < 0) || (x < 0 && prev >= 0)) zcr++;
+      }
+    }
+    const rms = Math.sqrt(ss / n);
+    if (rms < 0.01) continue;
+    const zcrRate = zcr / (n - 1);
+    const hfRatio = diffSs / ss;
+    scoreSum += clamp((zcrRate * 250 + hfRatio * 100) / 2, 0, 100);
+    activeFrames++;
+  }
+  return activeFrames > 0 ? Math.round(scoreSum / activeFrames) : 0;
 }
 
 function finishRefMeasure() {
@@ -1617,7 +1644,7 @@ function finishRefMeasure() {
     return;
   }
   if (env == null || db <= env) {
-    refFail("「あ〜」の音が環境音より大きくありませんでした。iPhoneの音圧調整を上げてから、もう一度押してください。");
+    refFail("「あいうえお」の音が環境音より大きくありませんでした。iPhoneの音圧調整を上げてから、もう一度押してください。");
     return;
   }
   const rawDb = db - (S.gainDb + S.calDb);
@@ -1625,7 +1652,8 @@ function finishRefMeasure() {
   const shift = calNew - S.calDb;
   S.calDb = calNew;
   try { localStorage.setItem("somnolog-cal-db", String(S.calDb)); } catch (e) {}
-  S.ref = { db: round2(db + shift), envDb: env == null ? null : round2(env + shift), at: Date.now() };
+  const refVoiceScore = (S.refPcm && S.refPcm.length) ? calcFloatVoiceScore(S.refPcm) : null;
+  S.ref = { db: round2(db + shift), envDb: env == null ? null : round2(env + shift), voiceScore: refVoiceScore, at: Date.now() };
   saveRef();
   if (S.refPcm && S.refPcm.length) {
     try {
@@ -1637,7 +1665,9 @@ function finishRefMeasure() {
   S.refColl = null;
   S.refPcm = null;
   S.refEnv = null;
-  showRefMsg("基準音圧を設定しました（「あ〜」" + S.ref.db.toFixed(1) + "dB）。この設定は保存されるので、次回からは測らなくて大丈夫です。そのまま「記録開始」を押してください。");
+  showRefMsg("基準音圧を設定しました（「あいうえお」" + S.ref.db.toFixed(1) + "dB" +
+    (refVoiceScore != null ? "／人声スコア " + refVoiceScore : "") +
+    "）。この設定は保存されるので、次回からは測らなくて大丈夫です。そのまま「記録開始」を押してください。");
   setButtons();
   updateUI();
 }
@@ -1660,10 +1690,9 @@ function calcClipVoiceScore(pcm) {
       }
     }
     const rms = Math.sqrt(ss / FRAME);
-    if (rms < 0.01) continue; // 無音・環境音区間はスキップ
+    if (rms < 0.01) continue;
     const zcrRate = zcr / (FRAME - 1);
     const hfRatio = diffSs / ss;
-    // ゼロ交差率と高域比から0〜100のスコアを算出
     const fScore = clamp((zcrRate * 250 + hfRatio * 100) / 2, 0, 100);
     scoreSum += fScore;
     activeFrames++;
@@ -1678,7 +1707,7 @@ async function pump() {
     while (S.running && S.queue.length) {
       const f = S.queue.shift();
       if (f.ep !== S.epoch) continue;
-      processFrame(f, 0); // 記録中は音圧のみで判定
+      processFrame(f, 0);
     }
   } finally { S.busy = false; }
 }
@@ -2749,6 +2778,20 @@ function reclassifyByThreshold(sess, evs, th) {
   sess.counts = c;
 }
 
+function updateRefJudgeDisplay() {
+  const box = $("tv-ref-judge");
+  const val = $("tv-ref-judge-val");
+  if (!box || !val) return;
+  if (S.ref && S.ref.voiceScore != null) {
+    box.hidden = false;
+    const isSpeech = S.ref.voiceScore >= tl.voiceThresh;
+    val.textContent = (isSpeech ? "人声（除外）" : "いびき（残る）") + "（スコア " + S.ref.voiceScore + "）";
+    val.style.color = isSpeech ? "#4caf7a" : "#ff9f43";
+  } else {
+    box.hidden = true;
+  }
+}
+
 async function openDetail(sid) {
   S.detailSid = sid;
   tl.data = null;
@@ -2775,6 +2818,7 @@ async function openDetail(sid) {
   $("tl-tags").innerHTML = "";
   $("tl-legend").innerHTML = "";
   $("tl-voice-adj").hidden = false;
+  updateRefJudgeDisplay();
   setSaveEnabled(false);
   showPage("detail");
 
@@ -2967,7 +3011,7 @@ function tagGraphSvg(tag, t0, t1) {
   }
 
   for (const m of lineMults) {
-    const label = m === 1 ? "あ〜の音量" : "あ〜の" + m + "倍";
+    const label = m === 1 ? "あいうえおの音量" : "あいうえおの" + m + "倍";
     g += '<text x="' + (TL_PL + 4) + '" y="' + (yOfMult(m) - 3).toFixed(1) + '" font-size="9" fill="' +
       (m === 1 ? "#f3e7c9" : "#e8e4d8") + '">' + label + "</text>";
   }
@@ -3109,7 +3153,7 @@ function tagLineSvg(tag, t0, t1) {
   }
 
   for (const m of lineMults) {
-    const label = m === 1 ? "あ〜の音量" : "あ〜の" + m + "倍";
+    const label = m === 1 ? "あいうえおの音量" : "あいうえおの" + m + "倍";
     g += '<text x="' + (TL_PL + 4) + '" y="' + (yOfMult(m) - 3).toFixed(1) + '" font-size="9" fill="' +
       (m === 1 ? "#f3e7c9" : "#e8e4d8") + '">' + label + "</text>";
   }
@@ -3226,11 +3270,12 @@ function renderTimeline() {
     $("tl-msg").textContent = "体動そのものに音声はありません。音を聴くには音声タグを選んでください。";
   } else {
     listenBtn.disabled = false;
-    listenBtn.textContent = lineMode ? "タイムラインの音を聴く" : "タイムラインの音を聴く（棒1本分）";
+    const fineMode = tl.zoomSec === 60 || tl.zoomSec === 120;
+    listenBtn.textContent = fineMode ? "黄色い線の位置から再生" : (lineMode ? "タイムラインの音を聴く" : "タイムラインの音を聴く（棒1本分）");
     if (($("tl-msg").textContent || "").indexOf("体動そのものに音声は") === 0) $("tl-msg").textContent = "";
   }
   $("tl-info").textContent = "表示：" + fmtTime(t0 * 1000) + " 〜 " + fmtTime(t1 * 1000) +
-    "（記録の終了 " + fmtTime(tl.total * 1000) + "）　" + (isMotion ? motionInfoText() : "下端＝室内の環境音、高さ＝「あ〜」の何倍か");
+    "（記録の終了 " + fmtTime(tl.total * 1000) + "）　" + (isMotion ? motionInfoText() : "下端＝室内の環境音、高さ＝「あいうえお」の何倍か");
   $("tl-cur-text").textContent = "黄色い線：記録から " + fmtTime(tl.cursor * 1000) +
     "（" + fmtClock(tl.data.sess.startedAt + tl.cursor * 1000) + "）";
 }
@@ -3345,27 +3390,44 @@ async function listenAtCursor() {
   if (!tl.data) return;
 
   const tag = selectedTag();
-  const binSec = tl.winLen / TL_BINS;
-  const idx = clamp(Math.floor((tl.cursor - tl.winStart) / binSec), 0, TL_BINS - 1);
-  const binStart = tl.winStart + idx * binSec;
-  const binEnd = Math.min(tl.winStart + tl.winLen, binStart + binSec);
+  const fineMode = tl.zoomSec === 60 || tl.zoomSec === 120;
+  let playStartSec, playEndSec, list;
 
-  const inBin = tl.data.evs
-    .filter((e) => e.type === tag && e.startMs / 1000 >= binStart && e.startMs / 1000 < binEnd)
-    .sort((a, b) => a.startMs - b.startMs);
-  if (!inBin.length) {
-    msg.textContent = "音なし（この棒には" + TAG_NAME[tag] + "がありません）";
-    return;
-  }
-  const list = inBin.filter((e) => e.clipId);
-  if (!list.length) {
-    msg.textContent = "この棒の音声データはありません（削除済み、または音声が保存されていません）。";
-    return;
+  if (fineMode) {
+    playStartSec = tl.cursor;
+    playEndSec = Math.min(tl.total, tl.winStart + tl.winLen);
+    list = tl.data.evs
+      .filter((e) => e.type === tag && e.clipId && (e.endMs != null ? e.endMs : e.startMs) / 1000 >= playStartSec && e.startMs / 1000 <= playEndSec)
+      .sort((a, b) => a.startMs - b.startMs);
+    if (!list.length) {
+      msg.textContent = "黄色い線以降に" + TAG_NAME[tag] + "がありません。";
+      return;
+    }
+  } else {
+    const binSec = tl.winLen / TL_BINS;
+    const idx = clamp(Math.floor((tl.cursor - tl.winStart) / binSec), 0, TL_BINS - 1);
+    const binStart = tl.winStart + idx * binSec;
+    const binEnd = Math.min(tl.winStart + tl.winLen, binStart + binSec);
+    const inBin = tl.data.evs
+      .filter((e) => e.type === tag && e.startMs / 1000 >= binStart && e.startMs / 1000 < binEnd)
+      .sort((a, b) => a.startMs - b.startMs);
+    if (!inBin.length) {
+      msg.textContent = "音なし（この棒には" + TAG_NAME[tag] + "がありません）";
+      return;
+    }
+    list = inBin.filter((e) => e.clipId);
+    if (!list.length) {
+      msg.textContent = "この棒の音声データはありません（削除済み、または音声が保存されていません）。";
+      return;
+    }
+    // 棒の範囲内の最初のいびき開始ポイントから再生
+    playStartSec = Math.max(binStart, list[0].startMs / 1000);
+    playEndSec = binEnd;
   }
 
   msg.textContent = "読み込み中…";
   try {
-    const pcm = await buildRangePcm(binStart * 1000, binEnd * 1000, list);
+    const pcm = await buildRangePcm(playStartSec * 1000, playEndSec * 1000, list);
     if (!pcm.length) { msg.textContent = "再生できる音声がありません。"; return; }
     const url = URL.createObjectURL(wavBlob(pcm, SR));
     blobUrls.push(url);
@@ -3373,14 +3435,21 @@ async function listenAtCursor() {
     au.controls = true;
     au.preload = "auto";
     au.src = url;
+    if (fineMode) {
+      au.ontimeupdate = () => {
+        tl.cursor = clamp(playStartSec + au.currentTime, tl.winStart, tl.winStart + tl.winLen);
+        renderTimeline();
+      };
+    }
     box.appendChild(au);
     au.play().catch(() => {});
 
     PLAY.list = list;
     const unsaved = list.filter((e) => !e.saved).length;
     setSaveEnabled(unsaved > 0);
-    msg.textContent = TAG_NAME[tag] + "の棒1本分（" + round1(binSec) + "秒）を再生します。音声 " + list.length + "件。" +
-      (unsaved ? "残したい場合は「この音声を保存する」を押してください。" : "この棒の音声はすべて保存済みです。");
+    msg.textContent = (fineMode ? "黄色い線の位置から再生します。" : TAG_NAME[tag] + "の開始位置から再生します。") +
+      "音声 " + list.length + "件。" +
+      (unsaved ? "残したい場合は「この音声を保存する」を押してください。" : "この区間の音声はすべて保存済みです。");
   } catch (err) {
     console.error(err);
     msg.textContent = "読み込めませんでした。もう一度押してください。";
@@ -4389,6 +4458,7 @@ on("tv-thresh", "input", (e) => {
   tl.voiceThresh = clamp(Number(e.target.value), 5, 95);
   $("tv-thresh-val").textContent = String(tl.voiceThresh);
   try { localStorage.setItem("somnolog-voice-thresh", String(tl.voiceThresh)); } catch (err) {}
+  updateRefJudgeDisplay();
   if (tl.data && !tl.data.engine) {
     reclassifyByThreshold(tl.data.sess, tl.data.evs, tl.voiceThresh);
     renderTimeline();
@@ -4483,7 +4553,7 @@ async function boot() {
   updateBackButtons();
   setButtons();
   updateUI();
-  if (S.ref) showRefMsg("基準音圧は設定済みです（「あ〜」" + S.ref.db.toFixed(1) + "dB、保存済み）。測り直さずに、そのまま「記録開始」を押せます。");
+  if (S.ref) showRefMsg("基準音圧は設定済みです（「あいうえお」" + S.ref.db.toFixed(1) + "dB、保存済み）。測り直さずに、そのまま「記録開始」を押せます。");
 
   checkUpdate().then(() => renderUpdate()).catch(() => {});
   setInterval(() => {
