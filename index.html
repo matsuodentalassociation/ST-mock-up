@@ -6,10 +6,6 @@
 <meta name="theme-color" content="#000000">
 <meta http-equiv="Cache-Control" content="no-cache">
 <script>
-/* 起動直後の入れ替え（V415）：端末に保存された新しい版があれば、開かれたページの版より先にそちらを動かす。
-   これで「アプリの更新」は公開ページ（Pages）の反映を待たずに、最新版を直接読み込める。
-   ここの数字は、このファイルの APP_VERSION と必ず一致させること（版上げ時の確認項目）。
-   住所に safe=1 が付いている時は、保存した版を捨てて、開かれたページの版で開く（開けなくなった時の逃げ道）。 */
 (function () {
   try {
     if (/[?&]safe=1(&|$)/.test(location.search)) {
@@ -18,7 +14,7 @@
       return;
     }
     var v = parseInt(localStorage.getItem("sl_boot_ver") || "0", 10);
-    if (v > 415) {
+    if (v > 416) {
       var h = localStorage.getItem("sl_boot_html");
       if (h && h.indexOf("</html>") >= 0) {
         document.open();
@@ -26,10 +22,10 @@
         document.close();
       }
     }
-  } catch (e) { /* 失敗したら、開かれたページの版のまま続ける */ }
+  } catch (e) {}
 })();
 </script>
-<title>SomnoLog V415 基準音圧版</title>
+<title>SomnoLog V416 基準音圧版</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -121,7 +117,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 1-1 起動・QR読み取り -->
 <main id="page-start" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V415</h1>
+    <h1 class="app-name">SomnoLog V416</h1>
     <span class="tag">患者情報確認</span>
   </header>
 
@@ -178,7 +174,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録画面 -->
 <main id="page-record" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V415</h1>
+    <h1 class="app-name">SomnoLog V416</h1>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="rec-back" class="sub mini" type="button">戻る</button>
       <span id="rec-badge" class="tag">待機中</span>
@@ -208,7 +204,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録の準備 -->
 <main id="page-prep" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V415</h1>
+    <h1 class="app-name">SomnoLog V416</h1>
     <button id="prep-back" class="sub mini" type="button">戻る</button>
   </header>
   <button id="prep-usage-btn" class="warnbtn">使い方を見る</button>
@@ -729,7 +725,7 @@ const SleepEngine = (() => {
 <script>
 "use strict";
 /* ===== バージョン ===== */
-const APP_VERSION = 415;
+const APP_VERSION = 416;
 const APP = "SomnoLogV" + APP_VERSION + "_ref";
 
 /* ===== 更新の取得元（GitHub） ===== */
@@ -1641,7 +1637,7 @@ function finishRefMeasure() {
   updateUI();
 }
 
-/* ===== 軽量な音響特徴による人声フィルター（厳しめ設定・V414） ===== */
+/* ===== 軽量な音響特徴による人声フィルター（V416） ===== */
 function calcVoiceProb(d) {
   let ss = 0, diffSs = 0, zcr = 0;
   const n = d.length;
@@ -1658,7 +1654,7 @@ function calcVoiceProb(d) {
   if (ss < 1e-7) return 0;
   const zcrRate = zcr / (n - 1);
   const hfRatio = diffSs / ss;
-  if (zcrRate > 0.08 || hfRatio > 0.25) return 0.85;
+  if (zcrRate > 0.15 && hfRatio > 0.40) return 0.85;
   return 0.05;
 }
 
@@ -1727,11 +1723,12 @@ function processFrame(f, p) {
 
   if (S.calibrated) {
     if (lv > S.base + S.loudDb) {
-      if (!S.cand) S.cand = { startMs: t, lastMs: t, peakDb: -100, sumDb: 0, n: 0 };
+      if (!S.cand) S.cand = { startMs: t, lastMs: t, peakDb: -100, sumDb: 0, sumP: 0, n: 0 };
       const c = S.cand;
       c.lastMs = t;
       c.peakDb = Math.max(c.peakDb, lv);
       c.sumDb += lv;
+      c.sumP += p;
       c.n++;
       if (t - c.startMs > SEG_MAX * 1000) { closeCand(c, t + FRAME / SR * 1000); S.cand = null; }
     } else if (S.cand) {
@@ -1752,20 +1749,13 @@ function closeCand(c, endMsOverride) {
   S.pendingCands.push({ c, endMs, durMs, due: endMs + POST_MS });
 }
 
-function maxP(from, to) {
-  let m = 0;
-  for (const h of S.pHist) if (h.t >= from && h.t <= to && h.p > m) m = h.p;
-  return m;
-}
-
 function decideCand(it) {
   const { c, endMs, durMs } = it;
   const vadOn = S.vadOk;
-  const inside = vadOn ? maxP(c.startMs, endMs) : 0;
-  const near = vadOn ? maxP(c.startMs - 1000, endMs + 1000) : 0;
+  const meanP = c.n > 0 ? c.sumP / c.n : 0;
   let type;
   if (durMs > SEG_MAX * 1000) type = "unknown";
-  else if (vadOn && (inside > VAD_TH || near > VAD_TH)) type = "speech";
+  else if (vadOn && meanP > VAD_TH) type = "speech";
   else type = "snore";
 
   const ev = {
@@ -1773,7 +1763,7 @@ function decideCand(it) {
     startMs: round1(c.startMs), endMs: round1(endMs), durMs: round1(durMs),
     peakSourceDb: round1(c.peakDb - (S.gainDb + S.calDb)), peakAppliedDb: round1(c.peakDb),
     meanSourceDb: round1(c.sumDb / c.n - (S.gainDb + S.calDb)), meanAppliedDb: round1(c.sumDb / c.n),
-    vadMax: vadOn ? round2(inside) : null, vadNear: vadOn ? round2(near) : null,
+    vadMax: vadOn ? round2(meanP) : null, vadNear: null,
     gainDb: S.gainDb, calDb: S.calDb, label: null, clipId: null, review: null, saved: false
   };
   if (type === "snore" || type === "unknown" || type === "speech") {
