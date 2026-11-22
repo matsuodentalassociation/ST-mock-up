@@ -14,7 +14,7 @@
       return;
     }
     var v = parseInt(localStorage.getItem("sl_boot_ver") || "0", 10);
-    if (v > 416) {
+    if (v > 417) {
       var h = localStorage.getItem("sl_boot_html");
       if (h && h.indexOf("</html>") >= 0) {
         document.open();
@@ -25,7 +25,7 @@
   } catch (e) {}
 })();
 </script>
-<title>SomnoLog V416 基準音圧版</title>
+<title>SomnoLog V417 基準音圧版</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
@@ -117,7 +117,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 1-1 起動・QR読み取り -->
 <main id="page-start" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V416</h1>
+    <h1 class="app-name">SomnoLog V417</h1>
     <span class="tag">患者情報確認</span>
   </header>
 
@@ -174,7 +174,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録画面 -->
 <main id="page-record" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V416</h1>
+    <h1 class="app-name">SomnoLog V417</h1>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="rec-back" class="sub mini" type="button">戻る</button>
       <span id="rec-badge" class="tag">待機中</span>
@@ -204,7 +204,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
 <!-- 記録の準備 -->
 <main id="page-prep" class="page" hidden>
   <header class="head">
-    <h1 class="app-name">SomnoLog V416</h1>
+    <h1 class="app-name">SomnoLog V417</h1>
     <button id="prep-back" class="sub mini" type="button">戻る</button>
   </header>
   <button id="prep-usage-btn" class="warnbtn">使い方を見る</button>
@@ -319,6 +319,11 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;line-height:1.9}
     <div id="d-chart" class="chart tl-area"></div>
     <div id="tl-legend" class="legend"></div>
     <div id="tl-tags" class="tagbar"></div>
+    <div id="tl-voice-adj" class="card" hidden>
+      <div class="kv"><span>人声判定のしきい値</span><b id="tv-thresh-val">35</b></div>
+      <input id="tv-thresh" type="range" min="5" max="95" step="1" value="35">
+      <p class="muted">記録した「あいうえお」が「いびき」から消えて「人声」に移る位置まで左へ動かして調整してください。</p>
+    </div>
     <div id="tl-motion-adj" hidden>
       <div class="kv"><span>体動のしきい値</span><b id="tm-thresh-val">0.05 g</b></div>
       <input id="tm-thresh" type="range" min="0" max="0.3" step="0.01" value="0.05">
@@ -725,7 +730,7 @@ const SleepEngine = (() => {
 <script>
 "use strict";
 /* ===== バージョン ===== */
-const APP_VERSION = 416;
+const APP_VERSION = 417;
 const APP = "SomnoLogV" + APP_VERSION + "_ref";
 
 /* ===== 更新の取得元（GitHub） ===== */
@@ -1028,7 +1033,7 @@ const DB = (() => {
         return await run(store, "readonly", (s) => s.index(idx).getAll(IDBKeyRange.only(key)));
       } catch (e) {
         if (e && e.name === "NotFoundError") {
-          const all = await run(store, "readonly", (s) => s.getAll());
+          const all = await run(store, "readonly", (x) => x.getAll());
           return (all || []).filter((r) => r && r[idx] === key);
         }
         throw e;
@@ -1065,7 +1070,7 @@ const S = {
 const cal = { year: 0, month: 0, selected: null, index: 0, byDay: new Map() };
 
 const ZOOM_DEFAULT = 0;
-const tl = { data: null, total: 0, winStart: 0, winLen: 0, cursor: 0, zoomSec: ZOOM_DEFAULT, scale: { refDb: -40, envDb: -52, topDb: -40 }, tags: { snore: true, unknown: false, env: false, speech: false } };
+const tl = { data: null, total: 0, winStart: 0, winLen: 0, cursor: 0, zoomSec: ZOOM_DEFAULT, scale: { refDb: -40, envDb: -52, topDb: -40 }, tags: { snore: true, unknown: false, env: false, speech: false }, voiceThresh: 35 };
 
 const SH = { sid: null, zipDone: false, zipName: "" };
 
@@ -1637,25 +1642,33 @@ function finishRefMeasure() {
   updateUI();
 }
 
-/* ===== 軽量な音響特徴による人声フィルター（V416） ===== */
-function calcVoiceProb(d) {
-  let ss = 0, diffSs = 0, zcr = 0;
-  const n = d.length;
-  for (let i = 0; i < n; i++) {
-    const x = d[i];
-    ss += x * x;
-    if (i > 0) {
-      const prev = d[i - 1];
-      const df = x - prev;
-      diffSs += df * df;
-      if ((x >= 0 && prev < 0) || (x < 0 && prev >= 0)) zcr++;
+/* ===== 記録後の人声スコア計算（0〜100） ===== */
+function calcClipVoiceScore(pcm) {
+  let activeFrames = 0;
+  let scoreSum = 0;
+  const n = pcm.length;
+  for (let i = 0; i + FRAME <= n; i += FRAME) {
+    let ss = 0, diffSs = 0, zcr = 0;
+    for (let j = 0; j < FRAME; j++) {
+      const x = pcm[i + j] / 32768;
+      ss += x * x;
+      if (j > 0) {
+        const prev = pcm[i + j - 1] / 32768;
+        const df = x - prev;
+        diffSs += df * df;
+        if ((x >= 0 && prev < 0) || (x < 0 && prev >= 0)) zcr++;
+      }
     }
+    const rms = Math.sqrt(ss / FRAME);
+    if (rms < 0.01) continue; // 無音・環境音区間はスキップ
+    const zcrRate = zcr / (FRAME - 1);
+    const hfRatio = diffSs / ss;
+    // ゼロ交差率と高域比から0〜100のスコアを算出
+    const fScore = clamp((zcrRate * 250 + hfRatio * 100) / 2, 0, 100);
+    scoreSum += fScore;
+    activeFrames++;
   }
-  if (ss < 1e-7) return 0;
-  const zcrRate = zcr / (n - 1);
-  const hfRatio = diffSs / ss;
-  if (zcrRate > 0.15 && hfRatio > 0.40) return 0.85;
-  return 0.05;
+  return activeFrames > 0 ? Math.round(scoreSum / activeFrames) : 0;
 }
 
 async function pump() {
@@ -1665,9 +1678,7 @@ async function pump() {
     while (S.running && S.queue.length) {
       const f = S.queue.shift();
       if (f.ep !== S.epoch) continue;
-      const p = calcVoiceProb(f.data);
-      if (!S.running || f.ep !== S.epoch) break;
-      processFrame(f, p);
+      processFrame(f, 0); // 記録中は音圧のみで判定
     }
   } finally { S.busy = false; }
 }
@@ -1751,22 +1762,17 @@ function closeCand(c, endMsOverride) {
 
 function decideCand(it) {
   const { c, endMs, durMs } = it;
-  const vadOn = S.vadOk;
-  const meanP = c.n > 0 ? c.sumP / c.n : 0;
-  let type;
-  if (durMs > SEG_MAX * 1000) type = "unknown";
-  else if (vadOn && meanP > VAD_TH) type = "speech";
-  else type = "snore";
+  let type = durMs > SEG_MAX * 1000 ? "unknown" : "snore";
 
   const ev = {
     id: uid(), sid: S.sid, type,
     startMs: round1(c.startMs), endMs: round1(endMs), durMs: round1(durMs),
     peakSourceDb: round1(c.peakDb - (S.gainDb + S.calDb)), peakAppliedDb: round1(c.peakDb),
     meanSourceDb: round1(c.sumDb / c.n - (S.gainDb + S.calDb)), meanAppliedDb: round1(c.sumDb / c.n),
-    vadMax: vadOn ? round2(meanP) : null, vadNear: null,
+    vadMax: null, vadNear: null, voiceScore: null,
     gainDb: S.gainDb, calDb: S.calDb, label: null, clipId: null, review: null, saved: false
   };
-  if (type === "snore" || type === "unknown" || type === "speech") {
+  if (type === "snore" || type === "unknown") {
     ev.clipId = saveClip(c.startMs - PRE_MS, endMs + POST_MS, ev.id, type, false);
   }
   S.counts[type]++;
@@ -2714,6 +2720,35 @@ async function deleteLegacySession(sid) {
   await DB.delMany("sessions", [sid]);
 }
 
+async function scoreEventsIfNeeded(sess, evs) {
+  let changed = false;
+  for (const e of evs) {
+    if ((e.type === "snore" || e.type === "speech") && e.clipId && e.voiceScore == null) {
+      const clip = await DB.get("clips", e.clipId);
+      if (clip && clip.data) {
+        const pcm = clipPcm(clip);
+        e.voiceScore = calcClipVoiceScore(pcm);
+        await DB.put("events", e);
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    reclassifyByThreshold(sess, evs, tl.voiceThresh);
+  }
+}
+
+function reclassifyByThreshold(sess, evs, th) {
+  const c = newCounts();
+  for (const e of evs) {
+    if ((e.type === "snore" || e.type === "speech") && e.voiceScore != null) {
+      e.type = e.voiceScore >= th ? "speech" : "snore";
+    }
+    if (c[e.type] != null) c[e.type]++;
+  }
+  sess.counts = c;
+}
+
 async function openDetail(sid) {
   S.detailSid = sid;
   tl.data = null;
@@ -2725,6 +2760,7 @@ async function openDetail(sid) {
       $("d-chart").innerHTML = '<p class="muted">読み込み中…</p>';
       $("tl-tags").innerHTML = "";
       $("tl-legend").innerHTML = "";
+      $("tl-voice-adj").hidden = true;
       setSaveEnabled(false);
       showPage("detail");
       const d = await engineDetailData(sid, false);
@@ -2738,12 +2774,16 @@ async function openDetail(sid) {
   $("d-chart").innerHTML = '<p class="muted">読み込み中…</p>';
   $("tl-tags").innerHTML = "";
   $("tl-legend").innerHTML = "";
+  $("tl-voice-adj").hidden = false;
   setSaveEnabled(false);
   showPage("detail");
 
   const secs = (await DB.byIndex("secs", "sid", sid)).sort((a, b) => a.sec - b.sec);
   const evs = (await DB.byIndex("events", "sid", sid)).sort((a, b) => a.startMs - b.startMs);
   if (S.detailSid !== sid) return;
+  await scoreEventsIfNeeded(sess, evs);
+  if (S.detailSid !== sid) return;
+  reclassifyByThreshold(sess, evs, tl.voiceThresh);
   initTimeline(sess, secs, evs);
 }
 
@@ -3614,6 +3654,7 @@ async function shareScope() {
   const sess = await DB.get("sessions", SH.sid);
   const refDb = activeRef(sess).refDb;
   const evs = (await DB.byIndex("events", "sid", SH.sid)).sort((a, b) => a.startMs - b.startMs);
+  reclassifyByThreshold(sess, evs, tl.voiceThresh);
   const allSpeeches = evs.filter((e) => e.type === "speech" && e.clipId);
   const loudUnsavedSpeeches = allSpeeches.filter((e) => !e.saved && (refDb == null || (dbOf(e) != null && dbOf(e) >= refDb)));
   return {
@@ -4336,6 +4377,23 @@ try {
   const sc = localStorage.getItem("somnolog-cal-db");
   if (sc != null) S.calDb = Math.max(-12, Math.min(18, Number(sc) || 0));
 } catch (e) {}
+try {
+  const sv = localStorage.getItem("somnolog-voice-thresh");
+  if (sv != null) {
+    tl.voiceThresh = clamp(Number(sv) || 35, 5, 95);
+    $("tv-thresh").value = tl.voiceThresh;
+    $("tv-thresh-val").textContent = String(tl.voiceThresh);
+  }
+} catch (e) {}
+on("tv-thresh", "input", (e) => {
+  tl.voiceThresh = clamp(Number(e.target.value), 5, 95);
+  $("tv-thresh-val").textContent = String(tl.voiceThresh);
+  try { localStorage.setItem("somnolog-voice-thresh", String(tl.voiceThresh)); } catch (err) {}
+  if (tl.data && !tl.data.engine) {
+    reclassifyByThreshold(tl.data.sess, tl.data.evs, tl.voiceThresh);
+    renderTimeline();
+  }
+});
 try {
   const st2 = localStorage.getItem("somnolog-motion-thresh-g");
   tl.motionThresh = st2 == null ? 0.05 : Number(st2);
