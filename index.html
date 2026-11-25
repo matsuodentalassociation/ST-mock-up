@@ -48,11 +48,6 @@
 </div>
 <div class="row" id="status">準備中…</div>
 
-<div class="row" id="drop">音声ファイルをここに落とすか、
-  <button class="sub" id="pick">ファイルを選ぶ</button>
-  <input type="file" id="file" accept="audio/*" hidden>
-</div>
-
 <h2 style="font-size:16px">区間（新しい順）</h2>
 <div id="list"></div>
 
@@ -201,23 +196,13 @@ async function judge(samples) {
   const ratio = probs.length ? over / probs.length : 0;
   const gatePass = ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN;
   if (!gatePass) return { voice: false, reason: "門番で除外（声らしくない）", ratio, max, words: 0 };
-  // 門番2：定常音
-  const flat = spectralFlatness(samples);
-  if (flat >= FLAT_MAX) return { voice: false, reason: "門番で除外（変化のない定常音）", ratio, max, words: 0, flat };
   // 認識（先頭 ASR_MAX_SEC 秒まで）
   const pipe = await asrInit($("model").value);
   const input = samples.slice(0, 16000 * ASR_MAX_SEC);
   const out = await pipe(input, { language: $("lang").value, task: "transcribe" });
   const words = await wordList(out.text || "", $("lang").value);
-  if (!words.length) return { voice: false, reason: "言葉にならなかった", ratio, max, words: 0, flat };
-  // 繰り返し幻覚の破棄
-  if (words.length >= REP_WORDS_MIN) {
-    const uniq = new Set(words).size;
-    if (uniq / words.length <= REP_UNIQUE_MAX) {
-      return { voice: false, reason: "破棄（同じ言葉の繰り返し）", ratio, max, words: words.length, flat };
-    }
-  }
-  return { voice: true, reason: "言葉として認識できた", ratio, max, words: words.length, flat };
+  if (!words.length) return { voice: false, reason: "言葉にならなかった", ratio, max, words: 0 };
+  return { voice: true, reason: "言葉として認識できた", ratio, max, words: words.length };
 }
 
 // ===== 区間の表示（タイムスタンプだけを残す。文字は出さない）=====
@@ -225,7 +210,7 @@ function fmtTime(d) {
   const p = (n) => String(n).padStart(2, "0");
   return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
 }
-function addSegment(startDate, endDate, blob, label) {
+function addSegment(startDate, endDate, blob, label, samples16k) {
   const el = document.createElement("div");
   el.className = "seg";
   el.innerHTML = '<div class="head"><span class="verdict">判定中…</span></div>' +
@@ -240,30 +225,19 @@ function addSegment(startDate, endDate, blob, label) {
   el.appendChild(play);
   const list = $("list");
   list.prepend(el);
-  decode16k(blob).then((samples) => judge(samples)).then((r) => {
+  const ready = samples16k ? Promise.resolve(samples16k) : decode16k(blob);
+  return ready.then((samples) => judge(samples)).then((r) => {
     el.classList.add(r.voice ? "voice" : "none");
     el.querySelector(".verdict").textContent = r.voice ? "音声" : "音声ではない";
     meta.textContent += "｜" + r.reason + "｜単語数:" + r.words +
       "｜声らしさ最大:" + r.max.toFixed(2) + "（割合" + (r.ratio * 100).toFixed(1) + "%）";
     status("判定が終わった。聞き取りは続けられる");
+    return r;
   }).catch((e) => {
     el.querySelector(".verdict").textContent = "判定できなかった";
     meta.textContent += "｜" + (e && e.message || e);
   });
 }
-
-// ===== ファイル入力 =====
-$("pick").onclick = () => $("file").click();
-$("file").onchange = () => {
-  const f = $("file").files[0];
-  if (f) { const now = new Date(); addSegment(now, now, f, f.name); }
-};
-$("drop").ondragover = (e) => e.preventDefault();
-$("drop").ondrop = (e) => {
-  e.preventDefault();
-  const f = e.dataTransfer.files[0];
-  if (f) { const now = new Date(); addSegment(now, now, f, f.name); }
-};
 
 // ===== 聞き取り：音圧が立ち上がったら捕まえ、静かになったら区切って判定 =====
 const RISE = 0.02;         // 立ち上がりとみなす音の大きさ（ピーク 0〜1）
