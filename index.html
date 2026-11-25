@@ -1,215 +1,422 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>録音＋音声認識 同時動作テスト</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>いびき/会話 判定テスト（スマホ版）</title>
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: sans-serif;
-      background: #111;
-      color: #eee;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
       padding: 16px;
+      background: #0d1117;
+      color: #e6edf3;
       line-height: 1.5;
     }
-    h1 { font-size: 18px; margin-bottom: 12px; }
-    button {
+    h1 { font-size: 18px; margin: 0 0 12px; text-align: center; }
+    .btn {
+      display: block;
       width: 100%;
-      padding: 14px;
-      font-size: 16px;
+      padding: 18px;
+      font-size: 18px;
       font-weight: bold;
       border: none;
-      border-radius: 8px;
-      margin-bottom: 12px;
+      border-radius: 12px;
       cursor: pointer;
+      margin-bottom: 12px;
+      color: #fff;
     }
-    #btnStart { background: #2563eb; color: #fff; }
-    #btnStop { background: #dc2626; color: #fff; display: none; }
-    .box {
-      background: #222;
-      padding: 12px;
-      border-radius: 8px;
+    #btnRec { background: #1f6feb; }
+    #btnRec.running { background: #da3633; }
+    .controls {
+      display: flex;
+      gap: 8px;
       margin-bottom: 12px;
     }
-    .label { font-size: 12px; color: #aaa; }
-    .val { font-size: 16px; font-weight: bold; margin-top: 4px; }
-    .ok { color: #4ade80; }
-    .err { color: #f87171; }
+    .controls label {
+      flex: 1;
+      font-size: 12px;
+      color: #8b949e;
+      background: #161b22;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+    }
+    select {
+      width: 100%;
+      margin-top: 4px;
+      padding: 6px;
+      font-size: 14px;
+      background: #0d1117;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+    }
+    #statusBox {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    #status {
+      font-size: 14px;
+      color: #ffd479;
+      font-weight: bold;
+      min-height: 21px;
+    }
+    .meter-bg {
+      width: 100%;
+      height: 8px;
+      background: #21262d;
+      border-radius: 4px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
     #meterBar {
       width: 0%;
-      height: 12px;
-      background: #4ade80;
-      border-radius: 4px;
+      height: 100%;
+      background: #3fb950;
       transition: width 0.05s;
-      margin-top: 6px;
     }
-    #log {
-      background: #000;
-      padding: 10px;
-      border-radius: 8px;
-      height: 240px;
-      overflow-y: auto;
+    .history-title {
       font-size: 13px;
-      font-family: monospace;
-      white-space: pre-wrap;
+      color: #8b949e;
+      margin: 12px 0 6px;
+    }
+    #history {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-left: 5px solid #8b949e;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .card.snore { border-left-color: #3fb950; }
+    .card.speech { border-left-color: #f85149; }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .snore .card-verdict { color: #3fb950; }
+    .speech .card-verdict { color: #f85149; }
+    .card-meta { color: #8b949e; font-size: 12px; }
+    .card-text {
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: #0d1117;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 12px;
+      word-break: break-all;
     }
   </style>
 </head>
 <body>
-  <h1>録音＋音声認識 同時動作テスト</h1>
+  <h1>いびき / 会話 判定テスト</h1>
 
-  <button id="btnStart">テスト開始</button>
-  <button id="btnStop">テスト停止</button>
+  <button id="btnRec" class="btn">聞き取り開始</button>
 
-  <div class="box">
-    <div class="label">① 録音エンジン（マイク音量）</div>
-    <div id="micStatus" class="val">待機中</div>
-    <div id="meterBar"></div>
+  <div class="controls">
+    <label>モデル
+      <select id="model">
+        <option value="Xenova/whisper-tiny" selected>tiny（軽い・速い）</option>
+        <option value="Xenova/whisper-base">base（重い・正確）</option>
+      </select>
+    </label>
+    <label>言語
+      <select id="lang">
+        <option value="japanese" selected>日本語</option>
+        <option value="english">英語</option>
+      </select>
+    </label>
   </div>
 
-  <div class="box">
-    <div class="label">② OS音声認識（Web Speech API）</div>
-    <div id="speechStatus" class="val">待機中</div>
+  <div id="statusBox">
+    <div id="status">待機中（「聞き取り開始」を押してね）</div>
+    <div class="meter-bg"><div id="meterBar"></div></div>
   </div>
 
-  <div class="label">動作ログ（タイムスタンプ付き）</div>
-  <div id="log"></div>
+  <div class="history-title">判定履歴（新しい順）</div>
+  <div id="history"></div>
 
-  <script>
-    const btnStart = document.getElementById('btnStart');
-    const btnStop = document.getElementById('btnStop');
-    const micStatus = document.getElementById('micStatus');
-    const speechStatus = document.getElementById('speechStatus');
-    const meterBar = document.getElementById('meterBar');
-    const logEl = document.getElementById('log');
+  <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
+  <script type="module">
+    import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+    env.allowLocalModels = false;
 
-    let audioCtx = null;
-    let micStream = null;
-    let animId = null;
-    let recognition = null;
-    let isRunning = false;
+    const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
+    ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
+    ort.env.wasm.numThreads = 1;
 
-    function addLog(msg) {
-      const now = new Date();
-      const ts = now.toTimeString().split(' ')[0];
-      logEl.textContent = `[${ts}] ${msg}\n` + logEl.textContent;
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => { $("status").textContent = t; };
+
+    // 門番のしきい値
+    const GATE_RATIO_MIN = 0.02;
+    const GATE_MAX_MIN = 0.50;
+    const FRAME = 512, CONTEXT = 64, SR = 16000;
+
+    // 聞き取りパラメータ
+    const RISE = 0.02;
+    const SILENCE_MS = 650;
+    const MAX_SEG_MS = 20000;
+    const PRE_MS = 500;
+
+    let vadSession = null;
+    let asr = null;
+    let asrModel = null;
+    let listen = null;
+    let wakeLock = null;
+
+    async function loadVad() {
+      if (vadSession) return vadSession;
+      setStatus("門番（VAD）を読み込み中…");
+      vadSession = await ort.InferenceSession.create(VAD_URL, { executionProviders: ["wasm"] });
+      return vadSession;
     }
 
-    btnStart.onclick = async () => {
-      isRunning = true;
-      btnStart.style.display = 'none';
-      btnStop.style.display = 'block';
-      logEl.textContent = '';
-      addLog('テストを開始します...');
-
-      // 1. 録音エンジン（マイク入力）の起動
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioCtx.createMediaStreamSource(micStream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        micStatus.textContent = '動作中（音量取得OK）';
-        micStatus.className = 'val ok';
-        addLog('録音エンジン起動成功');
-
-        function updateMeter() {
-          if (!isRunning) return;
-          analyser.getByteTimeDomainData(dataArray);
-          let max = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            const v = Math.abs(dataArray[i] - 128) / 128;
-            if (v > max) max = v;
+    async function loadAsr() {
+      const m = $("model").value;
+      if (asr && asrModel === m) return asr;
+      setStatus("音声認識モデルを読み込み中…（初回は少し待ちます）");
+      asr = await pipeline("automatic-speech-recognition", m, {
+        quantized: true,
+        progress_callback: (p) => {
+          if (p && p.status === "progress" && p.file && p.total) {
+            setStatus("モデル読込中 " + Math.round((p.loaded / p.total) * 100) + "%");
           }
-          meterBar.style.width = Math.min(100, Math.round(max * 200)) + '%';
-          animId = requestAnimationFrame(updateMeter);
         }
-        updateMeter();
-      } catch (e) {
-        micStatus.textContent = 'エラー: ' + e.message;
-        micStatus.className = 'val err';
-        addLog('録音エンジンエラー: ' + e.message);
-      }
+      });
+      asrModel = m;
+      return asr;
+    }
 
-      // 2. OS音声認識の起動
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        speechStatus.textContent = 'このブラウザは音声認識に非対応です';
-        speechStatus.className = 'val err';
-        addLog('音声認識API非対応');
+    async function vadProbs(audio) {
+      const session = await loadVad();
+      let state = new ort.Tensor("float32", new Float32Array(2 * 1 * 128), [2, 1, 128]);
+      const srT = new ort.Tensor("int64", new BigInt64Array([16000n]), []);
+      const probs = [];
+      let prev = new Float32Array(CONTEXT);
+      for (let at = 0; at + FRAME <= audio.length; at += FRAME) {
+        const frame = audio.subarray(at, at + FRAME);
+        const input = new Float32Array(CONTEXT + FRAME);
+        input.set(prev, 0);
+        input.set(frame, CONTEXT);
+        const feeds = { input: new ort.Tensor("float32", input, [1, CONTEXT + FRAME]), sr: srT, state };
+        const out = await session.run(feeds);
+        probs.push(out.output.data[0]);
+        state = out.stateN;
+        prev = frame.slice(FRAME - CONTEXT);
+      }
+      return probs;
+    }
+
+    function resample16k(audioBuffer) {
+      const off = new OfflineAudioContext(1, Math.max(1, Math.round(audioBuffer.duration * SR)), SR);
+      const src = off.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(off.destination);
+      src.start();
+      return off.startRendering().then((b) => b.getChannelData(0).slice());
+    }
+
+    function countWords(text) {
+      const cleaned = text.replace(/[\s。、,.!！?？「」『』・…ー~〜]/g, "");
+      if (!cleaned) return 0;
+      try {
+        const seg = new Intl.Segmenter("ja", { granularity: "word" });
+        let n = 0;
+        for (const s of seg.segment(text)) if (s.isWordLike) n++;
+        return n;
+      } catch (_) {
+        return cleaned.length;
+      }
+    }
+
+    function encodeWav(samples, sampleRate) {
+      const bytes = new ArrayBuffer(44 + samples.length * 2);
+      const v = new DataView(bytes);
+      const tag = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+      tag(0, "RIFF"); v.setUint32(4, bytes.byteLength - 8, true); tag(8, "WAVE"); tag(12, "fmt ");
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+      v.setUint16(32, 2, true); v.setUint16(34, 16, true); tag(36, "data");
+      v.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) {
+        const x = Math.max(-1, Math.min(1, samples[i]));
+        v.setInt16(44 + i * 2, Math.round(x * (x < 0 ? 32768 : 32767)), true);
+      }
+      return new Blob([bytes], { type: "audio/wav" });
+    }
+
+    function addHistoryCard({ isSpeech, gatePass, ratio, max, words, text, sec }) {
+      const now = new Date().toTimeString().split(" ")[0];
+      const card = document.createElement("div");
+      card.className = "card " + (isSpeech ? "speech" : "snore");
+
+      const verdictText = isSpeech ? "言葉あり（破棄）" : "言葉なし（いびき候補）";
+      const gateText = gatePass ? "門番通過" : "門番で除外";
+
+      card.innerHTML = `
+        <div class="card-head">
+          <span class="card-verdict">${verdictText}</span>
+          <span>${sec}秒</span>
+        </div>
+        <div class="card-meta">
+          ${now} ｜ ${gateText} ｜ 声らしさ最大:${max} (割合:${ratio}%) ｜ 単語:${words}
+        </div>
+        ${text ? `<div class="card-text">認識文字: ${text}</div>` : ""}
+      `;
+      $("history").prepend(card);
+    }
+
+    async function judge(blob) {
+      const t0 = performance.now();
+      try {
+        const buf = await blob.arrayBuffer();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await ctx.decodeAudioData(buf);
+        const audio = await resample16k(audioBuffer);
+        ctx.close();
+
+        setStatus("門番で声らしさを測定中…");
+        const probs = await vadProbs(audio);
+        const voiced = probs.filter((p) => p >= 0.5).length;
+        const ratio = probs.length ? voiced / probs.length : 0;
+        const max = probs.length ? Math.max(...probs) : 0;
+        const gatePass = ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN;
+
+        let words = 0, text = "";
+        if (gatePass) {
+          const transcriber = await loadAsr();
+          setStatus("音声認識中…");
+          const out = await transcriber(audio, {
+            language: $("lang").value,
+            task: "transcribe",
+            chunk_length_s: 30,
+            stride_length_s: 5
+          });
+          text = (out && out.text || "").trim();
+          words = countWords(text);
+        }
+
+        const isSpeech = gatePass && words >= 1;
+        const sec = ((performance.now() - t0) / 1000).toFixed(1);
+
+        addHistoryCard({
+          isSpeech,
+          gatePass,
+          ratio: (ratio * 100).toFixed(1),
+          max: max.toFixed(2),
+          words,
+          text,
+          sec
+        });
+
+        if (listen) setStatus("聞き取り中… 次の音を待っています");
+      } catch (e) {
+        setStatus("判定エラー: " + (e && e.message || e));
+      }
+    }
+
+    $("btnRec").onclick = async () => {
+      if (listen) {
+        stopListen();
         return;
       }
-
-      recognition = new SpeechRecognition();
-      recognition.lang = 'ja-JP';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        speechStatus.textContent = '動作中（認識待機）';
-        speechStatus.className = 'val ok';
-        addLog('音声認識スタート');
-      };
-
-      recognition.onresult = (event) => {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const text = event.results[i][0].transcript;
-          const isFinal = event.results[i].isFinal;
-          if (isFinal) {
-            addLog(`【確定】"${text}"`);
-          } else {
-            speechStatus.textContent = `認識中: ${text}`;
-          }
-        }
-      };
-
-      recognition.onerror = (event) => {
-        speechStatus.textContent = 'エラー: ' + event.error;
-        speechStatus.className = 'val err';
-        addLog('音声認識エラー: ' + event.error);
-      };
-
-      recognition.onend = () => {
-        addLog('音声認識が終了しました');
-        if (isRunning) {
-          addLog('自動再起動を試みます...');
-          try {
-            recognition.start();
-          } catch (e) {
-            addLog('再起動失敗: ' + e.message);
-          }
-        } else {
-          speechStatus.textContent = '停止';
-          speechStatus.className = 'val';
-        }
-      };
-
       try {
-        recognition.start();
+        if (navigator.wakeLock) {
+          try { wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {}
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        if (ac.state === "suspended") await ac.resume();
+
+        const src = ac.createMediaStreamSource(stream);
+        const proc = ac.createScriptProcessor(4096, 1, 1);
+        const sr = ac.sampleRate;
+        const preLen = Math.floor(sr * PRE_MS / 1000);
+
+        let pre = [], seg = null, silentMs = 0, judging = false;
+
+        proc.onaudioprocess = (e) => {
+          const ch = e.inputBuffer.getChannelData(0);
+          let peak = 0;
+          for (let i = 0; i < ch.length; i++) {
+            const a = Math.abs(ch[i]);
+            if (a > peak) peak = a;
+          }
+          $("meterBar").style.width = Math.min(100, Math.round(peak * 300)) + "%";
+
+          const chunkMs = (ch.length / sr) * 1000;
+          if (!seg) {
+            pre.push(ch.slice());
+            let total = pre.reduce((n, c) => n + c.length, 0);
+            while (total - pre[0].length >= preLen) {
+              total -= pre[0].length;
+              pre.shift();
+            }
+            if (peak >= RISE) {
+              seg = pre;
+              pre = [];
+              silentMs = 0;
+              if (!judging) setStatus("音をキャッチ！ 録音中…");
+            }
+          } else {
+            seg.push(ch.slice());
+            if (peak >= RISE) silentMs = 0;
+            else silentMs += chunkMs;
+
+            const segMs = (seg.reduce((n, c) => n + c.length, 0) / sr) * 1000;
+            if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
+              const parts = seg;
+              seg = null;
+              const total = parts.reduce((n, c) => n + c.length, 0);
+              const all = new Float32Array(total);
+              let o = 0;
+              for (const c of parts) { all.set(c, o); o += c.length; }
+
+              if (!judging) {
+                judging = true;
+                judge(encodeWav(all, sr)).finally(() => { judging = false; });
+              }
+            }
+          }
+        };
+
+        src.connect(proc);
+        proc.connect(ac.destination);
+        listen = { stream, ac, proc };
+        $("btnRec").textContent = "聞き取り停止";
+        $("btnRec").classList.add("running");
+        setStatus("聞き取り中… 音の立ち上がりを待っています");
       } catch (e) {
-        addLog('音声認識開始エラー: ' + e.message);
+        setStatus("マイク起動エラー: " + (e && e.message || e));
       }
     };
 
-    btnStop.onclick = () => {
-      isRunning = false;
-      btnStart.style.display = 'block';
-      btnStop.style.display = 'none';
-
-      if (animId) cancelAnimationFrame(animId);
-      if (micStream) micStream.getTracks().forEach(t => t.stop());
-      if (audioCtx) audioCtx.close();
-      if (recognition) recognition.stop();
-
-      micStatus.textContent = '停止';
-      micStatus.className = 'val';
-      meterBar.style.width = '0%';
-      addLog('テストを停止しました');
-    };
+    function stopListen() {
+      if (!listen) return;
+      listen.proc.disconnect();
+      listen.ac.close();
+      listen.stream.getTracks().forEach((t) => t.stop());
+      listen = null;
+      if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+      $("btnRec").textContent = "聞き取り開始";
+      $("btnRec").classList.remove("running");
+      $("meterBar").style.width = "0%";
+      setStatus("停止しました");
+    }
   </script>
 </body>
 </html>
