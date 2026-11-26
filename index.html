@@ -16,7 +16,7 @@
     .box-title { font-size: 13px; color: #9fb0c1; margin-bottom: 6px; }
     #resultArea { display: none; border-color: #22c55e; }
     audio { width: 100%; margin-top: 8px; }
-    .log-item { font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #262c34; display: flex; justify-content: space-between; }
+    .log-item { font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #262c34; display: flex; justify-content: space-between; gap: 8px; }
     .log-item.speech { color: #ff8589; }
     .log-item.snore { color: #4ade80; }
   </style>
@@ -24,7 +24,7 @@
 <body>
   <h1>タイムスタンプ式 音声フィルター</h1>
   <button id="rec" disabled>準備中…</button>
-  <div id="status">モデルを読み込んでいます…</div>
+  <div id="status">準備中…</div>
 
   <div id="resultArea" class="box">
     <div class="box-title" style="color:#4ade80; font-weight:bold;">✅ 完成したログ（言葉の区間を無音化済み）</div>
@@ -68,7 +68,6 @@
 
     async function voskInit() {
       if (voskModel) return voskModel;
-      setStatus("辞書モデルを読み込み中…（初回約50MB）");
       const [a, b] = await Promise.all([
         fetch("model_part1.bin").then((r) => r.arrayBuffer()),
         fetch("model_part2.bin").then((r) => r.arrayBuffer()),
@@ -116,7 +115,7 @@
       return probs;
     }
 
-    // ===== Vosk（30秒待ちを2秒に短縮＋finalresult対応） =====
+    // ===== Vosk（最大2秒待ち＋finalresult対応） =====
     function countWords(text) {
       try {
         const seg = new Intl.Segmenter("ja", { granularity: "word" });
@@ -145,7 +144,7 @@
         });
         rec.acceptWaveformFloat(samples16k, 16000);
         rec.retrieveFinalResult();
-        setTimeout(finish, 2000); // 最大2秒で切り上げ
+        setTimeout(finish, 2000);
       });
     }
 
@@ -155,9 +154,11 @@
       let max = 0, over = 0;
       for (const p of probs) { if (p > max) max = p; if (p >= 0.5) over++; }
       const ratio = probs.length ? over / probs.length : 0;
-      if (!(ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN)) return false;
+      if (!(ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN)) {
+        return { speech: false, text: "" };
+      }
       const text = await voskText(s16);
-      return countWords(text) >= 1;
+      return { speech: countWords(text) >= 1, text };
     }
 
     // ===== WAV書き出し =====
@@ -179,17 +180,18 @@
 
     // ===== 録音・タイムスタンプ記録 =====
     let fullChunks = [];
-    let deleteRanges = []; // { startSec, endSec }
+    let deleteRanges = [];
     let totalSamples = 0;
     let sampleRate = 48000;
     const queue = [];
     let processing = false;
 
-    function addLog(startSec, endSec, speech) {
+    function addLog(startSec, endSec, speech, text) {
       if ($("timeline").textContent === "まだ記録はありません") $("timeline").innerHTML = "";
       const div = document.createElement("div");
       div.className = "log-item " + (speech ? "speech" : "snore");
-      div.innerHTML = `<span>${startSec.toFixed(1)}秒 〜 ${endSec.toFixed(1)}秒</span><span>${speech ? "🚫 言葉（削除予定）" : "✅ いびき等（残す）"}</span>`;
+      const label = speech ? `🚫 言葉（${text}）` : "✅ いびき等（残す）";
+      div.innerHTML = `<span>${startSec.toFixed(1)}秒 〜 ${endSec.toFixed(1)}秒</span><span>${label}</span>`;
       $("timeline").prepend(div);
     }
 
@@ -198,11 +200,11 @@
       processing = true;
       while (queue.length) {
         const item = queue.shift();
-        const speech = await isSpeech(item.samples, sampleRate);
-        if (speech) {
+        const res = await isSpeech(item.samples, sampleRate);
+        if (res.speech) {
           deleteRanges.push({ startSec: item.startSec, endSec: item.endSec });
         }
-        addLog(item.startSec, item.endSec, speech);
+        addLog(item.startSec, item.endSec, res.speech, res.text);
       }
       processing = false;
     }
@@ -219,19 +221,29 @@
         deleteRanges = [];
         totalSamples = 0;
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // スマホの雑音カット・エコーキャンセルをオフにして頭切れを防ぐ
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
         const ac = new (window.AudioContext || window.webkitAudioContext)();
         if (ac.state === "suspended") await ac.resume();
         sampleRate = ac.sampleRate;
 
         const src = ac.createMediaStreamSource(stream);
         const proc = ac.createScriptProcessor(4096, 1, 1);
+        const mute = ac.createGain();
+        mute.gain.value = 0; // スピーカーから音を出さない
+
         const preLen = Math.floor(sampleRate * PRE_MS / 1000);
         let pre = [], seg = null, segStartSample = 0, silentMs = 0;
 
         proc.onaudioprocess = (e) => {
           const ch = e.inputBuffer.getChannelData(0).slice();
-          fullChunks.push(ch); // 全体の録音は止めずにずっと貯める
+          fullChunks.push(ch);
 
           let peak = 0;
           for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
@@ -267,7 +279,8 @@
         };
 
         src.connect(proc);
-        proc.connect(ac.destination);
+        proc.connect(mute);
+        mute.connect(ac.destination);
         listen = { stream, ac, proc };
         $("rec").textContent = "録音停止 ＆ ログ作成";
         $("rec").classList.add("stop");
@@ -287,17 +300,14 @@
       $("rec").classList.remove("stop");
       setStatus("残りの判定を待って、タイムスタンプの区間を消去しています…");
 
-      // 判定キューが空になるまで少し待つ
       while (processing || queue.length > 0) {
         await new Promise((r) => setTimeout(r, 200));
       }
 
-      // 全録音データを1つに結合
       const all = new Float32Array(totalSamples);
       let offset = 0;
       for (const c of fullChunks) { all.set(c, offset); offset += c.length; }
 
-      // タイムスタンプに該当する区間を無音（0）に書き換える
       for (const r of deleteRanges) {
         const s = Math.max(0, Math.floor(r.startSec * sampleRate));
         const e = Math.min(all.length, Math.ceil(r.endSec * sampleRate));
