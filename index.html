@@ -1,307 +1,328 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>音声フィルター確認アプリ</title>
-<style>
-  body { font-family: sans-serif; margin: 16px; background: #101418; color: #e8ecef; }
-  h1 { font-size: 20px; }
-  button { font-size: 17px; padding: 12px 18px; border-radius: 10px; border: 0; background: #2f7cf6; color: #fff; }
-  button.stop { background: #c33; }
-  button.sub { background: #37414c; font-size: 13px; padding: 6px 12px; }
-  select { font-size: 15px; padding: 6px; border-radius: 6px; }
-  .row { margin: 12px 0; }
-  #lamp { border-radius: 12px; padding: 18px; font-size: 20px; font-weight: bold; text-align: center; background: #232a32; color: #9fb0c1; min-height: 1.5em; }
-  #lamp.pass { background: #14532d; color: #bbf7d0; }
-  #lamp.block { background: #7f1d1d; color: #fecaca; }
-  #lamp.wait { background: #554400; color: #ffe9a8; }
-  #status { font-size: 14px; color: #ffd97a; min-height: 1.4em; margin-top: 8px; }
-  #count { font-size: 14px; color: #9fb0c1; margin-top: 6px; }
-  .seg { border: 1px solid #333; border-left: 6px solid #888; border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: #171c22; }
-  .seg.block { border-left-color: #e5484d; }
-  .seg.pass { border-left-color: #22c55e; }
-  .seg .verdict { font-size: 17px; font-weight: bold; }
-  .seg.block .verdict { color: #ff8589; }
-  .seg.pass .verdict { color: #4ade80; }
-  .seg .meta { font-size: 13px; color: #9fb0c1; margin-top: 4px; }
-  .seg button { margin-top: 8px; }
-  label { font-size: 14px; color: #9fb0c1; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>タイムスタンプ式 音声フィルターテスト</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
+    h1 { font-size: 19px; margin: 0 0 12px; }
+    button { width: 100%; font-size: 18px; font-weight: bold; padding: 16px; border-radius: 12px; border: 0; background: #2f7cf6; color: #fff; cursor: pointer; }
+    button.stop { background: #da3633; }
+    button:disabled { background: #37414c; color: #8b949e; }
+    #status { font-size: 14px; color: #ffd97a; margin: 10px 0; min-height: 1.4em; font-weight: bold; }
+    .box { background: #171c22; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .box-title { font-size: 13px; color: #9fb0c1; margin-bottom: 6px; }
+    #resultArea { display: none; border-color: #22c55e; }
+    audio { width: 100%; margin-top: 8px; }
+    .log-item { font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #262c34; display: flex; justify-content: space-between; }
+    .log-item.speech { color: #ff8589; }
+    .log-item.snore { color: #4ade80; }
+  </style>
 </head>
 <body>
-<h1>音声フィルター確認アプリ</h1>
+  <h1>タイムスタンプ式 音声フィルター</h1>
+  <button id="rec" disabled>準備中…</button>
+  <div id="status">モデルを読み込んでいます…</div>
 
-<div class="row">
-  <button id="rec">フィルター開始</button>
-</div>
-<div class="row" style="font-size:14px; color:#9fb0c1;">認識エンジン：Vosk（軽量・日本語）</div>
+  <div id="resultArea" class="box">
+    <div class="box-title" style="color:#4ade80; font-weight:bold;">✅ 完成したログ（言葉の区間を無音化済み）</div>
+    <div id="resultInfo" style="font-size:13px;"></div>
+    <audio id="player" controls></audio>
+  </div>
 
-<div id="lamp">止まっている</div>
-<div id="status">準備中…</div>
-<div id="count">通した区間 0件 ／ 止めた区間 0件</div>
+  <div class="box">
+    <div class="box-title">判定タイムライン（新しい順）</div>
+    <div id="timeline">まだ記録はありません</div>
+  </div>
 
-<h2 style="font-size:16px">区間（新しい順）</h2>
-<div id="list"></div>
+  <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
+  <script type="module">
+    const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
+    ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
+    ort.env.wasm.numThreads = 1;
 
-<script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
-<script type="module">
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => { $("status").textContent = t; };
 
-const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
-ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
-ort.env.wasm.numThreads = 1;
+    const GATE_RATIO_MIN = 0.02;
+    const GATE_MAX_MIN = 0.50;
+    const RISE = 0.02;
+    const SILENCE_MS = 650;
+    const MAX_SEG_MS = 20000;
+    const PRE_MS = 500;
 
-const $ = (id) => document.getElementById(id);
-const status = (t) => { $("status").textContent = t; };
-const lamp = (cls, t) => { const l = $("lamp"); l.className = cls; l.textContent = t; };
+    let vadSession = null;
+    let voskModel = null;
+    let listen = null;
 
-// ===== 判定の物差し（試作と同じ）=====
-const GATE_RATIO_MIN = 0.02;
-const GATE_MAX_MIN = 0.50;
-
-// ===== 16kHz モノラルにそろえる =====
-async function decode16k(blob) {
-  const buf = await blob.arrayBuffer();
-  const tmp = new OfflineAudioContext(1, 1, 16000);
-  const audio = await tmp.decodeAudioData(buf);
-  const len = Math.ceil(audio.duration * 16000);
-  const off = new OfflineAudioContext(1, len, 16000);
-  const src = off.createBufferSource();
-  src.buffer = audio;
-  src.connect(off.destination);
-  src.start();
-  const rendered = await off.startRendering();
-  return rendered.getChannelData(0).slice();
-}
-
-// ===== 門番：Silero VAD =====
-let vadSession = null;
-async function vadInit() {
-  if (vadSession) return vadSession;
-  const modelBuf = await (await fetch(VAD_URL)).arrayBuffer();
-  vadSession = await ort.InferenceSession.create(modelBuf, { executionProviders: ["wasm"] });
-  return vadSession;
-}
-async function vadProbs(samples) {
-  const session = await vadInit();
-  const FRAME = 512, CONTEXT = 64;
-  let state = new Float32Array(2 * 1 * 128);
-  let context = new Float32Array(CONTEXT);
-  const probs = [];
-  for (let pos = 0; pos + FRAME <= samples.length; pos += FRAME) {
-    const frame = samples.subarray(pos, pos + FRAME);
-    const input = new Float32Array(CONTEXT + FRAME);
-    input.set(context); input.set(frame, CONTEXT);
-    const feeds = {
-      input: new ort.Tensor("float32", input, [1, CONTEXT + FRAME]),
-      sr: new ort.Tensor("int64", BigInt64Array.from([16000n]), []),
-      state: new ort.Tensor("float32", state, [2, 1, 128]),
-    };
-    const out = await session.run(feeds);
-    probs.push(out.output.data[0]);
-    state = out.stateN.data;
-    context = input.slice(input.length - CONTEXT);
-  }
-  return probs;
-}
-
-// ===== 音声認識（Vosk・端末内・文字は残さない）=====
-let voskModel = null;
-async function voskInit() {
-  if (voskModel) return voskModel;
-  status("認識モデルを読み込み中…（初回は約50MBの読み込み）");
-  const [a, b] = await Promise.all([
-    fetch("model_part1.bin").then((r) => r.arrayBuffer()),
-    fetch("model_part2.bin").then((r) => r.arrayBuffer()),
-  ]);
-  const url = URL.createObjectURL(new Blob([a, b], { type: "application/gzip" }));
-  voskModel = await Vosk.createModel(url);
-  return voskModel;
-}
-function countWords(text) {
-  try {
-    const seg = new Intl.Segmenter("ja", { granularity: "word" });
-    return [...seg.segment(text)].filter((s) => s.isWordLike).length;
-  } catch (e) {
-    return text.replace(/\s+/g, "").length > 0 ? 1 : 0;
-  }
-}
-async function voskText(samples) {
-  const model = await voskInit();
-  return new Promise((resolve) => {
-    const rec = new model.KaldiRecognizer(16000);
-    let text = "";
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      try { rec.remove(); } catch (e) {}
-      resolve(text.trim());
-    };
-    rec.on("result", (m) => { if (m && m.result && m.result.text) text += m.result.text; });
-    rec.acceptWaveformFloat(samples, 16000);
-    rec.retrieveFinalResult();
-    rec.on("result", () => setTimeout(finish, 150));
-    setTimeout(finish, 30000); // 安全網だけ。打ち切りではない
-  });
-}
-
-// ===== 判定：音声か否か =====
-async function isSpeech(samples) {
-  const probs = await vadProbs(samples);
-  let max = 0, over = 0;
-  for (const p of probs) { if (p > max) max = p; if (p >= 0.5) over++; }
-  const ratio = probs.length ? over / probs.length : 0;
-  if (!(ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN)) return false; // 門番で除外＝音声ではない
-  const text = await voskText(samples);
-  return countWords(text) >= 1;
-}
-
-// ===== 区間の表示と「出口」=====
-let passCount = 0, blockCount = 0;
-function updateCount() {
-  $("count").textContent = "通した区間 " + passCount + "件 ／ 止めた区間 " + blockCount + "件";
-}
-function fmtT(d) {
-  const p = (n) => String(n).padStart(2, "0");
-  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
-}
-const queue = [];
-let processing = false;
-function enqueue(startDate, endDate, blob) {
-  const el = document.createElement("div");
-  el.className = "seg";
-  el.innerHTML = '<div class="verdict">判定中…</div><div class="meta"></div>';
-  el.querySelector(".meta").textContent = fmtT(startDate) + " 〜 " + fmtT(endDate);
-  const play = document.createElement("button");
-  play.className = "sub"; play.textContent = "この区間を聴く";
-  const url = URL.createObjectURL(blob);
-  play.onclick = () => { new Audio(url).play(); };
-  el.appendChild(play);
-  $("list").prepend(el);
-  queue.push({ el, blob });
-  processQueue();
-}
-async function processQueue() {
-  if (processing) return;
-  processing = true;
-  while (queue.length) {
-    const { el, blob } = queue.shift();
-    try {
-      const samples = await decode16k(blob);
-      const speech = await isSpeech(samples);
-      if (speech) {
-        blockCount++;
-        el.classList.add("block");
-        el.querySelector(".verdict").textContent = "音声です（後ろへ流しません）";
-        lamp("block", "音声です — 後ろへ流しません");
-      } else {
-        passCount++;
-        el.classList.add("pass");
-        el.querySelector(".verdict").textContent = "音声ではありません（後ろへ通しました）";
-        lamp("pass", "後ろへ通しています");
-      }
-      updateCount();
-    } catch (e) {
-      el.querySelector(".verdict").textContent = "判定できなかった";
+    // ===== モデル初期化 =====
+    async function vadInit() {
+      if (vadSession) return vadSession;
+      const buf = await (await fetch(VAD_URL)).arrayBuffer();
+      vadSession = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
+      return vadSession;
     }
-  }
-  processing = false;
-  if (listen) lamp("", "フィルター作動中（音の立ち上がりを待っている）");
-}
 
-// ===== フィルター本体：マイク → バッファ → 区間 → 判定 =====
-const RISE = 0.02;         // 立ち上がりとみなす音の大きさ（ピーク 0〜1）
-const SILENCE_MS = 650;    // この長さ静かになったら区切る
-const MAX_SEG_MS = 20000;  // 1区間の上限
-const PRE_MS = 500;        // 立ち上がりの少し前から捕まえる（頭切れ防止）
-let listen = null;
+    async function voskInit() {
+      if (voskModel) return voskModel;
+      setStatus("辞書モデルを読み込み中…（初回約50MB）");
+      const [a, b] = await Promise.all([
+        fetch("model_part1.bin").then((r) => r.arrayBuffer()),
+        fetch("model_part2.bin").then((r) => r.arrayBuffer()),
+      ]);
+      const url = URL.createObjectURL(new Blob([a, b], { type: "application/gzip" }));
+      voskModel = await Vosk.createModel(url);
+      return voskModel;
+    }
 
-function encodeWav(samples, sampleRate) {
-  const bytes = new ArrayBuffer(44 + samples.length * 2);
-  const v = new DataView(bytes);
-  const tag = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
-  tag(0, "RIFF"); v.setUint32(4, bytes.byteLength - 8, true); tag(8, "WAVE"); tag(12, "fmt ");
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
-  v.setUint16(32, 2, true); v.setUint16(34, 16, true); tag(36, "data");
-  v.setUint32(40, samples.length * 2, true);
-  for (let i = 0; i < samples.length; i++) {
-    const x = Math.max(-1, Math.min(1, samples[i]));
-    v.setInt16(44 + i * 2, Math.round(x * (x < 0 ? 32768 : 32767)), true);
-  }
-  return new Blob([bytes], { type: "audio/wav" });
-}
+    // ===== 16kHz変換 =====
+    async function resample16k(samples, srcRate) {
+      const len = Math.max(1, Math.ceil((samples.length / srcRate) * 16000));
+      const off = new OfflineAudioContext(1, len, 16000);
+      const buf = off.createBuffer(1, samples.length, srcRate);
+      buf.getChannelData(0).set(samples);
+      const src = off.createBufferSource();
+      src.buffer = buf;
+      src.connect(off.destination);
+      src.start();
+      const rendered = await off.startRendering();
+      return rendered.getChannelData(0).slice();
+    }
 
-$("rec").onclick = async () => {
-  if (listen) { stopListen(); return; }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ac.createMediaStreamSource(stream);
-    const proc = ac.createScriptProcessor(4096, 1, 1);
-    const sr = ac.sampleRate;
-    const preLen = Math.floor(sr * PRE_MS / 1000);
-    let pre = [], seg = null, segStart = null, silentMs = 0;
-    proc.onaudioprocess = (e) => {
-      const ch = e.inputBuffer.getChannelData(0);
-      let peak = 0;
-      for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
-      const chunkMs = ch.length / sr * 1000;
-      if (!seg) {
-        pre.push(ch.slice());
-        let total = pre.reduce((n, c) => n + c.length, 0);
-        while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
-        if (peak >= RISE) {
-          seg = pre; pre = []; silentMs = 0;
-          segStart = new Date(Date.now() - PRE_MS);
-          lamp("wait", "音が入った — 判定中");
+    // ===== 門番（Silero VAD） =====
+    async function vadProbs(samples16k) {
+      const session = await vadInit();
+      const FRAME = 512, CONTEXT = 64;
+      let state = new Float32Array(2 * 1 * 128);
+      let context = new Float32Array(CONTEXT);
+      const probs = [];
+      for (let pos = 0; pos + FRAME <= samples16k.length; pos += FRAME) {
+        const frame = samples16k.subarray(pos, pos + FRAME);
+        const input = new Float32Array(CONTEXT + FRAME);
+        input.set(context); input.set(frame, CONTEXT);
+        const feeds = {
+          input: new ort.Tensor("float32", input, [1, CONTEXT + FRAME]),
+          sr: new ort.Tensor("int64", BigInt64Array.from([16000n]), []),
+          state: new ort.Tensor("float32", state, [2, 1, 128]),
+        };
+        const out = await session.run(feeds);
+        probs.push(out.output.data[0]);
+        state = out.stateN.data;
+        context = input.slice(input.length - CONTEXT);
+      }
+      return probs;
+    }
+
+    // ===== Vosk（30秒待ちを2秒に短縮＋finalresult対応） =====
+    function countWords(text) {
+      try {
+        const seg = new Intl.Segmenter("ja", { granularity: "word" });
+        return [...seg.segment(text)].filter((s) => s.isWordLike).length;
+      } catch (e) {
+        return text.replace(/\s+/g, "").length > 0 ? 1 : 0;
+      }
+    }
+
+    async function voskText(samples16k) {
+      const model = await voskInit();
+      return new Promise((resolve) => {
+        const rec = new model.KaldiRecognizer(16000);
+        let text = "";
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          try { rec.remove(); } catch (e) {}
+          resolve(text.trim());
+        };
+        rec.on("result", (m) => { if (m && m.result && m.result.text) text += m.result.text; });
+        rec.on("finalresult", (m) => {
+          if (m && m.result && m.result.text) text += m.result.text;
+          finish();
+        });
+        rec.acceptWaveformFloat(samples16k, 16000);
+        rec.retrieveFinalResult();
+        setTimeout(finish, 2000); // 最大2秒で切り上げ
+      });
+    }
+
+    async function isSpeech(samples, sr) {
+      const s16 = await resample16k(samples, sr);
+      const probs = await vadProbs(s16);
+      let max = 0, over = 0;
+      for (const p of probs) { if (p > max) max = p; if (p >= 0.5) over++; }
+      const ratio = probs.length ? over / probs.length : 0;
+      if (!(ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN)) return false;
+      const text = await voskText(s16);
+      return countWords(text) >= 1;
+    }
+
+    // ===== WAV書き出し =====
+    function encodeWav(samples, sampleRate) {
+      const bytes = new ArrayBuffer(44 + samples.length * 2);
+      const v = new DataView(bytes);
+      const tag = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+      tag(0, "RIFF"); v.setUint32(4, bytes.byteLength - 8, true); tag(8, "WAVE"); tag(12, "fmt ");
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+      v.setUint16(32, 2, true); v.setUint16(34, 16, true); tag(36, "data");
+      v.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) {
+        const x = Math.max(-1, Math.min(1, samples[i]));
+        v.setInt16(44 + i * 2, Math.round(x * (x < 0 ? 32768 : 32767)), true);
+      }
+      return new Blob([bytes], { type: "audio/wav" });
+    }
+
+    // ===== 録音・タイムスタンプ記録 =====
+    let fullChunks = [];
+    let deleteRanges = []; // { startSec, endSec }
+    let totalSamples = 0;
+    let sampleRate = 48000;
+    const queue = [];
+    let processing = false;
+
+    function addLog(startSec, endSec, speech) {
+      if ($("timeline").textContent === "まだ記録はありません") $("timeline").innerHTML = "";
+      const div = document.createElement("div");
+      div.className = "log-item " + (speech ? "speech" : "snore");
+      div.innerHTML = `<span>${startSec.toFixed(1)}秒 〜 ${endSec.toFixed(1)}秒</span><span>${speech ? "🚫 言葉（削除予定）" : "✅ いびき等（残す）"}</span>`;
+      $("timeline").prepend(div);
+    }
+
+    async function processQueue() {
+      if (processing) return;
+      processing = true;
+      while (queue.length) {
+        const item = queue.shift();
+        const speech = await isSpeech(item.samples, sampleRate);
+        if (speech) {
+          deleteRanges.push({ startSec: item.startSec, endSec: item.endSec });
         }
-      } else {
-        seg.push(ch.slice());
-        if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
-        const segMs = seg.reduce((n, c) => n + c.length, 0) / sr * 1000;
-        if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
-          const parts = seg; seg = null;
-          const total = parts.reduce((n, c) => n + c.length, 0);
-          const all = new Float32Array(total);
-          let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
-          enqueue(segStart, new Date(), encodeWav(all, sr));
-          lamp("wait", "判定中…");
-        }
+        addLog(item.startSec, item.endSec, speech);
+      }
+      processing = false;
+    }
+
+    $("rec").onclick = async () => {
+      if (listen) {
+        stopListen();
+        return;
+      }
+      try {
+        $("resultArea").style.display = "none";
+        $("timeline").textContent = "まだ記録はありません";
+        fullChunks = [];
+        deleteRanges = [];
+        totalSamples = 0;
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        if (ac.state === "suspended") await ac.resume();
+        sampleRate = ac.sampleRate;
+
+        const src = ac.createMediaStreamSource(stream);
+        const proc = ac.createScriptProcessor(4096, 1, 1);
+        const preLen = Math.floor(sampleRate * PRE_MS / 1000);
+        let pre = [], seg = null, segStartSample = 0, silentMs = 0;
+
+        proc.onaudioprocess = (e) => {
+          const ch = e.inputBuffer.getChannelData(0).slice();
+          fullChunks.push(ch); // 全体の録音は止めずにずっと貯める
+
+          let peak = 0;
+          for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
+          const chunkMs = (ch.length / sampleRate) * 1000;
+
+          if (!seg) {
+            pre.push(ch);
+            let total = pre.reduce((n, c) => n + c.length, 0);
+            while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
+            if (peak >= RISE) {
+              seg = pre;
+              pre = [];
+              silentMs = 0;
+              segStartSample = Math.max(0, totalSamples - total);
+            }
+          } else {
+            seg.push(ch);
+            if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
+            const segMs = (seg.reduce((n, c) => n + c.length, 0) / sampleRate) * 1000;
+            if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
+              const parts = seg; seg = null;
+              const len = parts.reduce((n, c) => n + c.length, 0);
+              const all = new Float32Array(len);
+              let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
+
+              const startSec = segStartSample / sampleRate;
+              const endSec = (totalSamples + ch.length) / sampleRate;
+              queue.push({ samples: all, startSec, endSec });
+              processQueue();
+            }
+          }
+          totalSamples += ch.length;
+        };
+
+        src.connect(proc);
+        proc.connect(ac.destination);
+        listen = { stream, ac, proc };
+        $("rec").textContent = "録音停止 ＆ ログ作成";
+        $("rec").classList.add("stop");
+        setStatus("録音中… 喋ったりいびきをかいたりしてテストしてね");
+      } catch (e) {
+        setStatus("マイクエラー: " + (e && e.message || e));
       }
     };
-    src.connect(proc); proc.connect(ac.destination);
-    listen = { stream, ac, proc };
-    $("rec").textContent = "フィルター停止";
-    $("rec").classList.add("stop");
-    lamp("", "フィルター作動中（音の立ち上がりを待っている）");
-    status("マイクの音はフィルターを通ってから後ろへ流れます");
-  } catch (e) {
-    status("マイクが使えません: " + (e && e.message || e));
-  }
-};
-function stopListen() {
-  if (!listen) return;
-  listen.proc.disconnect(); listen.ac.close();
-  listen.stream.getTracks().forEach((t) => t.stop());
-  listen = null;
-  $("rec").textContent = "フィルター開始";
-  $("rec").classList.remove("stop");
-  lamp("", "止まっている");
-  status("停止した");
-}
 
-(async () => {
-  try {
-    await vadInit();
-    await voskInit();
-    status("準備完了。フィルター開始を押して");
-  } catch (e) {
-    status("準備に失敗: " + (e && e.message || e));
-  }
-})();
-</script>
+    async function stopListen() {
+      if (!listen) return;
+      listen.proc.disconnect();
+      listen.ac.close();
+      listen.stream.getTracks().forEach((t) => t.stop());
+      listen = null;
+      $("rec").textContent = "録音開始";
+      $("rec").classList.remove("stop");
+      setStatus("残りの判定を待って、タイムスタンプの区間を消去しています…");
+
+      // 判定キューが空になるまで少し待つ
+      while (processing || queue.length > 0) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      // 全録音データを1つに結合
+      const all = new Float32Array(totalSamples);
+      let offset = 0;
+      for (const c of fullChunks) { all.set(c, offset); offset += c.length; }
+
+      // タイムスタンプに該当する区間を無音（0）に書き換える
+      for (const r of deleteRanges) {
+        const s = Math.max(0, Math.floor(r.startSec * sampleRate));
+        const e = Math.min(all.length, Math.ceil(r.endSec * sampleRate));
+        all.fill(0, s, e);
+      }
+
+      const wavBlob = encodeWav(all, sampleRate);
+      $("player").src = URL.createObjectURL(wavBlob);
+      $("resultInfo").textContent = `全体 ${(totalSamples / sampleRate).toFixed(1)}秒のうち、言葉と判定された ${deleteRanges.length}区間 を無音にしました。`;
+      $("resultArea").style.display = "block";
+      setStatus("完了！下のプレイヤーで「言葉だけが消えているか」聴いてみてね");
+    }
+
+    // 起動時にモデル準備
+    (async () => {
+      try {
+        await vadInit();
+        await voskInit();
+        $("rec").disabled = false;
+        $("rec").textContent = "録音開始";
+        setStatus("準備完了！「録音開始」を押してテストしてね");
+      } catch (e) {
+        setStatus("準備エラー: " + (e && e.message || e));
+      }
+    })();
+  </script>
 </body>
 </html>
