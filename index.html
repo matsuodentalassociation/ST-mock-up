@@ -3,12 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>タイムスタンプ式 音声フィルターテスト</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>ST-SCOPE 音声フィルター v1.0.2</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
-    h1 { font-size: 19px; margin: 0 0 12px; }
-    button { width: 100%; font-size: 18px; font-weight: bold; padding: 16px; border-radius: 12px; border: 0; background: #2f7cf6; color: #fff; cursor: pointer; }
+    h1 { font-size: 19px; margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; }
+    .ver { font-size: 13px; background: #2f7cf6; color: #fff; padding: 2px 8px; border-radius: 6px; }
+    button { width: 100%; font-size: 18px; font-weight: bold; padding: 16px; border-radius: 12px; border: 0; background: #2f7cf6; color: #fff; cursor: pointer; margin-top: 8px; }
     button.stop { background: #da3633; }
     button:disabled { background: #37414c; color: #8b949e; }
     #status { font-size: 14px; color: #ffd97a; margin: 10px 0; min-height: 1.4em; font-weight: bold; }
@@ -23,9 +27,9 @@
   </style>
 </head>
 <body>
-  <h1>タイムスタンプ式 音声フィルター</h1>
+  <h1><span>ST-SCOPE 音声フィルター</span><span class="ver">v1.0.2</span></h1>
   <button id="rec" disabled>準備中…</button>
-  <div id="status">準備中…</div>
+  <div id="status">最新版を確認中…</div>
 
   <div id="resultArea" class="box">
     <div class="box-title" style="color:#4ade80; font-weight:bold;">✅ 完成したログ（言葉の区間を無音化済み）</div>
@@ -41,7 +45,37 @@
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
   <script type="module">
-    const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
+    const APP_VERSION = "v1.0.2";
+    const REPO = "matsuodentalassociation/ST-mock-up";
+    const BRANCH = "main";
+    const CACHE_BUST = `?v=${APP_VERSION}&t=${Date.now()}`;
+
+    // ===== GitHub最新コミットから最新版を取得・適用（動的フェッチ） =====
+    async function checkAndApplyLatest() {
+      if (sessionStorage.getItem("st_updated_to") === APP_VERSION) return false;
+      try {
+        const commitRes = await fetch(`https://api.github.com/repos/${REPO}/commits/${BRANCH}?t=${Date.now()}`, { cache: "no-store" });
+        if (!commitRes.ok) return false;
+        const commitData = await commitRes.json();
+        const sha = commitData.sha;
+        const rawUrl = `https://raw.githubusercontent.com/${REPO}/${sha}/index.html?t=${Date.now()}`;
+        const htmlRes = await fetch(rawUrl, { cache: "no-store" });
+        if (!htmlRes.ok) return false;
+        const latestHtml = await htmlRes.text();
+        if (latestHtml && !latestHtml.includes(`APP_VERSION = "${APP_VERSION}"`)) {
+          sessionStorage.setItem("st_updated_to", APP_VERSION);
+          document.open();
+          document.write(latestHtml);
+          document.close();
+          return true;
+        }
+      } catch (e) {
+        console.warn("Update check skipped:", e);
+      }
+      return false;
+    }
+
+    const VAD_URL = `https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx${CACHE_BUST}`;
     ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
     ort.env.wasm.numThreads = 1;
 
@@ -61,7 +95,7 @@
 
     async function vadInit() {
       if (vadSession) return vadSession;
-      const buf = await (await fetch(VAD_URL)).arrayBuffer();
+      const buf = await (await fetch(VAD_URL, { cache: "no-store" })).arrayBuffer();
       vadSession = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
       return vadSession;
     }
@@ -69,8 +103,8 @@
     async function voskInit() {
       if (voskModel) return voskModel;
       const [a, b] = await Promise.all([
-        fetch("model_part1.bin").then((r) => r.arrayBuffer()),
-        fetch("model_part2.bin").then((r) => r.arrayBuffer()),
+        fetch(`model_part1.bin${CACHE_BUST}`, { cache: "no-store" }).then((r) => r.arrayBuffer()),
+        fetch(`model_part2.bin${CACHE_BUST}`, { cache: "no-store" }).then((r) => r.arrayBuffer()),
       ]);
       const url = URL.createObjectURL(new Blob([a, b], { type: "application/gzip" }));
       voskModel = await Vosk.createModel(url);
@@ -318,6 +352,9 @@
 
     (async () => {
       try {
+        const updated = await checkAndApplyLatest();
+        if (updated) return;
+        setStatus("準備中…");
         await vadInit();
         await voskInit();
         $("rec").disabled = false;
