@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音声フィルター v1.0.2</title>
+  <title>ST-SCOPE 音声フィルター v1.0.3</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音声フィルター</span><span class="ver">v1.0.2</span></h1>
+  <h1><span>ST-SCOPE 音声フィルター</span><span class="ver">v1.0.3</span></h1>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
@@ -45,10 +45,9 @@
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.2";
+    const APP_VERSION = "v1.0.3";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
-    const CACHE_BUST = `?v=${APP_VERSION}&t=${Date.now()}`;
 
     // ===== GitHub最新コミットから最新版を取得・適用（動的フェッチ） =====
     async function checkAndApplyLatest() {
@@ -75,7 +74,7 @@
       return false;
     }
 
-    const VAD_URL = `https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx${CACHE_BUST}`;
+    const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
     ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
     ort.env.wasm.numThreads = 1;
 
@@ -95,17 +94,19 @@
 
     async function vadInit() {
       if (vadSession) return vadSession;
-      const buf = await (await fetch(VAD_URL, { cache: "no-store" })).arrayBuffer();
+      const buf = await (await fetch(VAD_URL)).arrayBuffer();
       vadSession = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
       return vadSession;
     }
 
     async function voskInit() {
       if (voskModel) return voskModel;
+      setStatus("2/3 音声辞書をダウンロード中…");
       const [a, b] = await Promise.all([
-        fetch(`model_part1.bin${CACHE_BUST}`, { cache: "no-store" }).then((r) => r.arrayBuffer()),
-        fetch(`model_part2.bin${CACHE_BUST}`, { cache: "no-store" }).then((r) => r.arrayBuffer()),
+        fetch("model_part1.bin").then((r) => { if (!r.ok) throw new Error("辞書1取得失敗: " + r.status); return r.arrayBuffer(); }),
+        fetch("model_part2.bin").then((r) => { if (!r.ok) throw new Error("辞書2取得失敗: " + r.status); return r.arrayBuffer(); }),
       ]);
+      setStatus("3/3 音声辞書を展開中…（少し待ちます）");
       const url = URL.createObjectURL(new Blob([a, b], { type: "application/gzip" }));
       voskModel = await Vosk.createModel(url);
       return voskModel;
@@ -354,7 +355,7 @@
       try {
         const updated = await checkAndApplyLatest();
         if (updated) return;
-        setStatus("準備中…");
+        setStatus("1/3 門番AIを読み込み中…");
         await vadInit();
         await voskInit();
         $("rec").disabled = false;
