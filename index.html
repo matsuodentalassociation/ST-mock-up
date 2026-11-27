@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音響解析フィルター v1.0.6</title>
+  <title>ST-SCOPE 音響解析フィルター v1.0.7</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.6</span></h1>
+  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.7</span></h1>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
@@ -44,7 +44,7 @@
 
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.6";
+    const APP_VERSION = "v1.0.7";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
 
@@ -89,13 +89,14 @@
 
     const GATE_RATIO_MIN = 0.15;
     const GATE_MAX_MIN = 0.60;
-    const RISE = 0.02;
+    const RISE = 0.008;
     const SILENCE_MS = 650;
     const MAX_SEG_MS = 20000;
     const PRE_MS = 500;
 
     let vadSession = null;
     let listen = null;
+    let flushPendingSegment = null;
 
     async function vadInit() {
       if (vadSession) return vadSession;
@@ -230,6 +231,19 @@
         const preLen = Math.floor(sampleRate * PRE_MS / 1000);
         let pre = [], seg = null, segStartSample = 0, silentMs = 0;
 
+        flushPendingSegment = () => {
+          if (seg && seg.length > 0) {
+            const parts = seg; seg = null;
+            const len = parts.reduce((n, c) => n + c.length, 0);
+            const all = new Float32Array(len);
+            let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
+            const startSec = segStartSample / sampleRate;
+            const endSec = totalSamples / sampleRate;
+            queue.push({ samples: all, startSec, endSec });
+            processQueue();
+          }
+        };
+
         proc.onaudioprocess = (e) => {
           const ch = e.inputBuffer.getChannelData(0).slice();
           fullChunks.push(ch);
@@ -285,6 +299,12 @@
       listen.ac.close();
       listen.stream.getTracks().forEach((t) => t.stop());
       listen = null;
+
+      if (flushPendingSegment) {
+        flushPendingSegment();
+        flushPendingSegment = null;
+      }
+
       $("rec").textContent = "録音開始";
       $("rec").classList.remove("stop");
       setStatus("残りの解析を待って、発話イベント区間を無音化しています…");
