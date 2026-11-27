@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音響解析フィルター v1.0.10</title>
+  <title>ST-SCOPE 音響解析フィルター v1.0.11</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.10</span></h1>
+  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.11</span></h1>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
@@ -44,9 +44,11 @@
 
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.10";
+    const APP_VERSION = "v1.0.11";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
     const LABELS = {
       speechLabel: "🚫 発話イベント（無音化対象）",
@@ -95,6 +97,8 @@
     let vadSession = null;
     let listen = null;
     let flushPendingSegment = null;
+    let iosRecog = null;
+    let isRecording = false;
 
     async function vadInit() {
       if (vadSession) return vadSession;
@@ -198,6 +202,72 @@
       processing = false;
     }
 
+    function startIOSSpeechRecognition() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        setStatus("このブラウザはOS音声認識に対応していません");
+        return;
+      }
+      const recog = new SpeechRec();
+      recog.lang = "ja-JP";
+      recog.continuous = true;
+      recog.interimResults = true;
+
+      let speechStartSec = null;
+
+      recog.onspeechstart = () => {
+        if (speechStartSec === null) {
+          speechStartSec = Math.max(0, (totalSamples / sampleRate) - 0.8);
+        }
+      };
+
+      recog.onresult = (e) => {
+        const nowSec = totalSamples / sampleRate;
+        if (speechStartSec === null) {
+          speechStartSec = Math.max(0, nowSec - 1.5);
+        }
+        const res = e.results[e.results.length - 1];
+        if (res.isFinal) {
+          const endSec = nowSec + 0.3;
+          deleteRanges.push({ startSec: speechStartSec, endSec });
+          addLog(speechStartSec, endSec, true, "iOS OS音声認識で発話を検出");
+          speechStartSec = null;
+        }
+      };
+
+      recog.onspeechend = () => {
+        if (speechStartSec !== null) {
+          const endSec = (totalSamples / sampleRate) + 0.3;
+          deleteRanges.push({ startSec: speechStartSec, endSec });
+          addLog(speechStartSec, endSec, true, "iOS OS音声認識で発話を検出");
+          speechStartSec = null;
+        }
+      };
+
+      recog.onerror = (e) => {
+        console.warn("SpeechRec error:", e.error);
+      };
+
+      recog.onend = () => {
+        if (speechStartSec !== null) {
+          const endSec = (totalSamples / sampleRate) + 0.3;
+          deleteRanges.push({ startSec: speechStartSec, endSec });
+          addLog(speechStartSec, endSec, true, "iOS OS音声認識で発話を検出");
+          speechStartSec = null;
+        }
+        if (isRecording) {
+          try { recog.start(); } catch (_) {}
+        }
+      };
+
+      try {
+        recog.start();
+        iosRecog = recog;
+      } catch (e) {
+        console.warn("SpeechRec start failed:", e);
+      }
+    }
+
     $("rec").onclick = async () => {
       if (listen) {
         stopListen();
@@ -209,6 +279,7 @@
         fullChunks = [];
         deleteRanges = [];
         totalSamples = 0;
+        isRecording = true;
 
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -226,58 +297,67 @@
         const mute = ac.createGain();
         mute.gain.value = 0;
 
-        const preLen = Math.floor(sampleRate * PRE_MS / 1000);
-        let pre = [], seg = null, segStartSample = 0, silentMs = 0;
+        if (isIOS) {
+          proc.onaudioprocess = (e) => {
+            const ch = e.inputBuffer.getChannelData(0).slice();
+            fullChunks.push(ch);
+            totalSamples += ch.length;
+          };
+          startIOSSpeechRecognition();
+        } else {
+          const preLen = Math.floor(sampleRate * PRE_MS / 1000);
+          let pre = [], seg = null, segStartSample = 0, silentMs = 0;
 
-        flushPendingSegment = () => {
-          if (seg && seg.length > 0) {
-            const parts = seg; seg = null;
-            const len = parts.reduce((n, c) => n + c.length, 0);
-            const all = new Float32Array(len);
-            let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
-            const startSec = segStartSample / sampleRate;
-            const endSec = totalSamples / sampleRate;
-            queue.push({ samples: all, startSec, endSec });
-            processQueue();
-          }
-        };
-
-        proc.onaudioprocess = (e) => {
-          const ch = e.inputBuffer.getChannelData(0).slice();
-          fullChunks.push(ch);
-
-          let peak = 0;
-          for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
-          const chunkMs = (ch.length / sampleRate) * 1000;
-
-          if (!seg) {
-            pre.push(ch);
-            let total = pre.reduce((n, c) => n + c.length, 0);
-            while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
-            if (peak >= RISE) {
-              seg = pre;
-              pre = [];
-              silentMs = 0;
-              segStartSample = Math.max(0, totalSamples - total);
-            }
-          } else {
-            seg.push(ch);
-            if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
-            const segMs = (seg.reduce((n, c) => n + c.length, 0) / sampleRate) * 1000;
-            if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
+          flushPendingSegment = () => {
+            if (seg && seg.length > 0) {
               const parts = seg; seg = null;
               const len = parts.reduce((n, c) => n + c.length, 0);
               const all = new Float32Array(len);
               let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
-
               const startSec = segStartSample / sampleRate;
-              const endSec = (totalSamples + ch.length) / sampleRate;
+              const endSec = totalSamples / sampleRate;
               queue.push({ samples: all, startSec, endSec });
               processQueue();
             }
-          }
-          totalSamples += ch.length;
-        };
+          };
+
+          proc.onaudioprocess = (e) => {
+            const ch = e.inputBuffer.getChannelData(0).slice();
+            fullChunks.push(ch);
+
+            let peak = 0;
+            for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
+            const chunkMs = (ch.length / sampleRate) * 1000;
+
+            if (!seg) {
+              pre.push(ch);
+              let total = pre.reduce((n, c) => n + c.length, 0);
+              while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
+              if (peak >= RISE) {
+                seg = pre;
+                pre = [];
+                silentMs = 0;
+                segStartSample = Math.max(0, totalSamples - total);
+              }
+            } else {
+              seg.push(ch);
+              if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
+              const segMs = (seg.reduce((n, c) => n + c.length, 0) / sampleRate) * 1000;
+              if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
+                const parts = seg; seg = null;
+                const len = parts.reduce((n, c) => n + c.length, 0);
+                const all = new Float32Array(len);
+                let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
+
+                const startSec = segStartSample / sampleRate;
+                const endSec = (totalSamples + ch.length) / sampleRate;
+                queue.push({ samples: all, startSec, endSec });
+                processQueue();
+              }
+            }
+            totalSamples += ch.length;
+          };
+        }
 
         src.connect(proc);
         proc.connect(mute);
@@ -285,14 +365,20 @@
         listen = { stream, ac, proc };
         $("rec").textContent = "録音停止 ＆ ログ作成";
         $("rec").classList.add("stop");
-        setStatus("録音中… 発話や連続音を出してテストしてね");
+        setStatus(isIOS ? "録音中（iOS音声認識モード）…" : "録音中（Android音響解析モード）…");
       } catch (e) {
+        isRecording = false;
         setStatus("マイクエラー: " + (e && e.message || e));
       }
     };
 
     async function stopListen() {
       if (!listen) return;
+      isRecording = false;
+      if (iosRecog) {
+        try { iosRecog.stop(); } catch (_) {}
+        iosRecog = null;
+      }
       listen.proc.disconnect();
       listen.ac.close();
       listen.stream.getTracks().forEach((t) => t.stop());
@@ -332,11 +418,13 @@
       try {
         const updated = await checkAndApplyLatest();
         if (updated) return;
-        setStatus("音響解析モデルを読み込み中…");
-        await vadInit();
+        if (!isIOS) {
+          setStatus("音響解析モデルを読み込み中…");
+          await vadInit();
+        }
         $("rec").disabled = false;
         $("rec").textContent = "録音開始";
-        setStatus("準備完了！「録音開始」を押してテストしてね");
+        setStatus(isIOS ? "準備完了（iOSモード）！「録音開始」を押してテストしてね" : "準備完了（Androidモード）！「録音開始」を押してテストしてね");
       } catch (e) {
         setStatus("準備エラー: " + (e && e.message || e));
       }
