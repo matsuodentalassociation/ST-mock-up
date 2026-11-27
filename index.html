@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音響解析フィルター v1.0.9</title>
+  <title>ST-SCOPE 音響解析フィルター v1.0.10</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.9</span></h1>
+  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.10</span></h1>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
@@ -44,18 +44,16 @@
 
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.9";
+    const APP_VERSION = "v1.0.10";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
 
-    // ===== 表示ラベル定義（公開前の一括置換用マップ） =====
     const LABELS = {
       speechLabel: "🚫 発話イベント（無音化対象）",
       keepLabel: "✅ 連続音・環境音（保持対象）",
       emptyTimeline: "まだ記録はありません"
     };
 
-    // ===== GitHub最新コミットから最新版を取得・適用（動的フェッチ） =====
     async function checkAndApplyLatest() {
       if (sessionStorage.getItem("st_updated_to") === APP_VERSION) return false;
       try {
@@ -89,7 +87,7 @@
 
     const GATE_RATIO_MIN = 0.15;
     const GATE_MAX_MIN = 0.60;
-    const RISE = 0.015;
+    const RISE = 0.02;
     const SILENCE_MS = 650;
     const MAX_SEG_MS = 20000;
     const PRE_MS = 500;
@@ -216,7 +214,7 @@
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
-            autoGainControl: true
+            autoGainControl: false
           }
         });
         const ac = new (window.AudioContext || window.webkitAudioContext)();
