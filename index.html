@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音響解析フィルター v1.0.8</title>
+  <title>ST-SCOPE 音響解析フィルター v1.0.9</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.8</span></h1>
+  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.9</span></h1>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
@@ -44,7 +44,7 @@
 
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.8";
+    const APP_VERSION = "v1.0.9";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
 
@@ -87,9 +87,9 @@
     const $ = (id) => document.getElementById(id);
     const setStatus = (t) => { $("status").textContent = t; };
 
-    const GATE_RATIO_MIN = 0.10;
-    const GATE_MAX_MIN = 0.30;
-    const RISE = 0.008;
+    const GATE_RATIO_MIN = 0.15;
+    const GATE_MAX_MIN = 0.60;
+    const RISE = 0.015;
     const SILENCE_MS = 650;
     const MAX_SEG_MS = 20000;
     const PRE_MS = 500;
@@ -216,7 +216,7 @@
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
-            autoGainControl: false
+            autoGainControl: true
           }
         });
         const ac = new (window.AudioContext || window.webkitAudioContext)();
