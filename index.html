@@ -6,12 +6,13 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>ST-SCOPE 音声フィルター v1.0.4</title>
+  <title>ST-SCOPE 音響解析フィルター v1.0.5</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #101418; color: #e8ecef; line-height: 1.5; }
     h1 { font-size: 19px; margin: 0 0 4px; display: flex; justify-content: space-between; align-items: center; }
     .ver { font-size: 13px; background: #2f7cf6; color: #fff; padding: 2px 8px; border-radius: 6px; }
+    .mode-badge { font-size: 12px; color: #9fb0c1; margin-bottom: 8px; }
     button { width: 100%; font-size: 18px; font-weight: bold; padding: 16px; border-radius: 12px; border: 0; background: #2f7cf6; color: #fff; cursor: pointer; margin-top: 8px; }
     button.stop { background: #da3633; }
     button:disabled { background: #37414c; color: #8b949e; }
@@ -22,31 +23,39 @@
     audio { width: 100%; margin-top: 8px; }
     .log-item { font-size: 12px; padding: 6px 8px; border-bottom: 1px solid #262c34; display: flex; flex-direction: column; gap: 2px; }
     .log-item.speech { color: #ff8589; }
-    .log-item.snore { color: #4ade80; }
+    .log-item.keep { color: #4ade80; }
     .log-debug { font-size: 11px; color: #9fb0c1; }
   </style>
 </head>
 <body>
-  <h1><span>ST-SCOPE 音声フィルター</span><span class="ver">v1.0.4</span></h1>
+  <h1><span>ST-SCOPE 音響解析フィルター</span><span class="ver">v1.0.5</span></h1>
+  <div id="modeBadge" class="mode-badge">判定エンジン確認中…</div>
   <button id="rec" disabled>準備中…</button>
   <div id="status">最新版を確認中…</div>
 
   <div id="resultArea" class="box">
-    <div class="box-title" style="color:#4ade80; font-weight:bold;">✅ 完成したログ（言葉の区間を無音化済み）</div>
+    <div class="box-title" style="color:#4ade80; font-weight:bold;">✅ 完成したセッションログ（発話イベント区間を無音化済み）</div>
     <div id="resultInfo" style="font-size:13px;"></div>
     <audio id="player" controls></audio>
   </div>
 
   <div class="box">
-    <div class="box-title">判定タイムライン（新しい順）</div>
+    <div class="box-title">イベント検出タイムライン（新しい順）</div>
     <div id="timeline">まだ記録はありません</div>
   </div>
 
   <script src="https://matsuodentalassociation.github.io/ST-SCOPE/ort.min.js"></script>
   <script type="module">
-    const APP_VERSION = "v1.0.4";
+    const APP_VERSION = "v1.0.5";
     const REPO = "matsuodentalassociation/ST-mock-up";
     const BRANCH = "main";
+
+    // ===== 表示ラベル定義（公開前の一括置換用マップ） =====
+    const LABELS = {
+      speechLabel: "🚫 発話イベント（無音化対象）",
+      keepLabel: "✅ 連続音・環境音（保持対象）",
+      emptyTimeline: "まだ記録はありません"
+    };
 
     // ===== GitHub最新コミットから最新版を取得・適用（動的フェッチ） =====
     async function checkAndApplyLatest() {
@@ -73,12 +82,18 @@
       return false;
     }
 
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => { $("status").textContent = t; };
+
+    // ===== 端末判定（iOSはOS標準音声認識、それ以外はSilero VAD） =====
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+                  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const useOSSpeech = isIOS && !!SpeechRec;
+
     const VAD_URL = "https://matsuodentalassociation.github.io/ST-SCOPE/silero_vad.onnx";
     ort.env.wasm.wasmPaths = "https://matsuodentalassociation.github.io/ST-SCOPE/";
     ort.env.wasm.numThreads = 1;
-
-    const $ = (id) => document.getElementById(id);
-    const setStatus = (t) => { $("status").textContent = t; };
 
     const GATE_RATIO_MIN = 0.15;
     const GATE_MAX_MIN = 0.60;
@@ -89,6 +104,7 @@
 
     let vadSession = null;
     let listen = null;
+    let recognition = null;
 
     async function vadInit() {
       if (vadSession) return vadSession;
@@ -133,7 +149,7 @@
       return probs;
     }
 
-    async function isSpeech(samples, sr) {
+    async function isSpeechVAD(samples, sr) {
       const s16 = await resample16k(samples, sr);
       const probs = await vadProbs(s16);
       let max = 0, over = 0;
@@ -142,7 +158,7 @@
       const speech = (ratio >= GATE_RATIO_MIN || max >= GATE_MAX_MIN);
       return {
         speech,
-        debug: `門番AI数値 → max:${max.toFixed(2)} / ratio:${ratio.toFixed(2)}`
+        debug: `音響解析数値 → max:${max.toFixed(2)} / ratio:${ratio.toFixed(2)}`
       };
     }
 
@@ -170,10 +186,10 @@
     let processing = false;
 
     function addLog(startSec, endSec, speech, debug) {
-      if ($("timeline").textContent === "まだ記録はありません") $("timeline").innerHTML = "";
+      if ($("timeline").textContent === LABELS.emptyTimeline) $("timeline").innerHTML = "";
       const div = document.createElement("div");
-      div.className = "log-item " + (speech ? "speech" : "snore");
-      const label = speech ? "🚫 言葉（削除予定）" : "✅ いびき等（残す）";
+      div.className = "log-item " + (speech ? "speech" : "keep");
+      const label = speech ? LABELS.speechLabel : LABELS.keepLabel;
       div.innerHTML = `<div style="display:flex;justify-content:space-between;"><span>${startSec.toFixed(1)}秒 〜 ${endSec.toFixed(1)}秒</span><span>${label}</span></div><div class="log-debug">${debug}</div>`;
       $("timeline").prepend(div);
     }
@@ -183,13 +199,68 @@
       processing = true;
       while (queue.length) {
         const item = queue.shift();
-        const res = await isSpeech(item.samples, sampleRate);
+        const res = await isSpeechVAD(item.samples, sampleRate);
         if (res.speech) {
           deleteRanges.push({ startSec: item.startSec, endSec: item.endSec });
         }
         addLog(item.startSec, item.endSec, res.speech, res.debug);
       }
       processing = false;
+    }
+
+    // ===== iOS用 OS標準音声認識の起動・自動復帰 =====
+    function startOSSpeechRecognition() {
+      if (!SpeechRec) return;
+      recognition = new SpeechRec();
+      recognition.lang = "ja-JP";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      let speechStartSec = null;
+
+      recognition.onspeechstart = () => {
+        const nowSec = totalSamples / sampleRate;
+        speechStartSec = Math.max(0, nowSec - 0.5);
+      };
+
+      recognition.onresult = () => {
+        if (speechStartSec === null) {
+          const nowSec = totalSamples / sampleRate;
+          speechStartSec = Math.max(0, nowSec - 0.8);
+        }
+      };
+
+      recognition.onspeechend = () => {
+        if (speechStartSec !== null) {
+          const endSec = (totalSamples / sampleRate) + 0.5;
+          deleteRanges.push({ startSec: speechStartSec, endSec });
+          addLog(speechStartSec, endSec, true, "OS音声認識エンジンにより検出");
+          speechStartSec = null;
+        }
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("SpeechRecognition error:", e.error);
+      };
+
+      recognition.onend = () => {
+        if (speechStartSec !== null) {
+          const endSec = (totalSamples / sampleRate) + 0.5;
+          deleteRanges.push({ startSec: speechStartSec, endSec });
+          addLog(speechStartSec, endSec, true, "OS音声認識エンジンにより検出（区切り）");
+          speechStartSec = null;
+        }
+        // 録音中なら自動で再起動
+        if (listen) {
+          try { recognition.start(); } catch (_) {}
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch (e) {
+        console.warn("SpeechRecognition start failed:", e);
+      }
     }
 
     $("rec").onclick = async () => {
@@ -199,7 +270,7 @@
       }
       try {
         $("resultArea").style.display = "none";
-        $("timeline").textContent = "まだ記録はありません";
+        $("timeline").textContent = LABELS.emptyTimeline;
         fullChunks = [];
         deleteRanges = [];
         totalSamples = 0;
@@ -227,34 +298,36 @@
           const ch = e.inputBuffer.getChannelData(0).slice();
           fullChunks.push(ch);
 
-          let peak = 0;
-          for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
-          const chunkMs = (ch.length / sampleRate) * 1000;
+          if (!useOSSpeech) {
+            let peak = 0;
+            for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
+            const chunkMs = (ch.length / sampleRate) * 1000;
 
-          if (!seg) {
-            pre.push(ch);
-            let total = pre.reduce((n, c) => n + c.length, 0);
-            while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
-            if (peak >= RISE) {
-              seg = pre;
-              pre = [];
-              silentMs = 0;
-              segStartSample = Math.max(0, totalSamples - total);
-            }
-          } else {
-            seg.push(ch);
-            if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
-            const segMs = (seg.reduce((n, c) => n + c.length, 0) / sampleRate) * 1000;
-            if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
-              const parts = seg; seg = null;
-              const len = parts.reduce((n, c) => n + c.length, 0);
-              const all = new Float32Array(len);
-              let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
+            if (!seg) {
+              pre.push(ch);
+              let total = pre.reduce((n, c) => n + c.length, 0);
+              while (pre.length > 1 && total - pre[0].length >= preLen) { total -= pre[0].length; pre.shift(); }
+              if (peak >= RISE) {
+                seg = pre;
+                pre = [];
+                silentMs = 0;
+                segStartSample = Math.max(0, totalSamples - total);
+              }
+            } else {
+              seg.push(ch);
+              if (peak >= RISE) silentMs = 0; else silentMs += chunkMs;
+              const segMs = (seg.reduce((n, c) => n + c.length, 0) / sampleRate) * 1000;
+              if ((silentMs >= SILENCE_MS && segMs >= 800) || segMs >= MAX_SEG_MS) {
+                const parts = seg; seg = null;
+                const len = parts.reduce((n, c) => n + c.length, 0);
+                const all = new Float32Array(len);
+                let o = 0; for (const c of parts) { all.set(c, o); o += c.length; }
 
-              const startSec = segStartSample / sampleRate;
-              const endSec = (totalSamples + ch.length) / sampleRate;
-              queue.push({ samples: all, startSec, endSec });
-              processQueue();
+                const startSec = segStartSample / sampleRate;
+                const endSec = (totalSamples + ch.length) / sampleRate;
+                queue.push({ samples: all, startSec, endSec });
+                processQueue();
+              }
             }
           }
           totalSamples += ch.length;
@@ -264,9 +337,14 @@
         proc.connect(mute);
         mute.connect(ac.destination);
         listen = { stream, ac, proc };
+
+        if (useOSSpeech) {
+          startOSSpeechRecognition();
+        }
+
         $("rec").textContent = "録音停止 ＆ ログ作成";
         $("rec").classList.add("stop");
-        setStatus("録音中… 喋ったりいびきをかいたりしてテストしてね");
+        setStatus("録音中… 発話や連続音を出してテストしてね");
       } catch (e) {
         setStatus("マイクエラー: " + (e && e.message || e));
       }
@@ -274,13 +352,21 @@
 
     async function stopListen() {
       if (!listen) return;
-      listen.proc.disconnect();
-      listen.ac.close();
-      listen.stream.getTracks().forEach((t) => t.stop());
+      const activeListen = listen;
       listen = null;
+
+      if (recognition) {
+        try { recognition.stop(); } catch (_) {}
+        recognition = null;
+      }
+
+      activeListen.proc.disconnect();
+      activeListen.ac.close();
+      activeListen.stream.getTracks().forEach((t) => t.stop());
+
       $("rec").textContent = "録音開始";
       $("rec").classList.remove("stop");
-      setStatus("残りの判定を待って、タイムスタンプの区間を消去しています…");
+      setStatus("残りの解析を待って、発話イベント区間を無音化しています…");
 
       while (processing || queue.length > 0) {
         await new Promise((r) => setTimeout(r, 200));
@@ -298,20 +384,29 @@
 
       const wavBlob = encodeWav(all, sampleRate);
       $("player").src = URL.createObjectURL(wavBlob);
-      $("resultInfo").textContent = `全体 ${(totalSamples / sampleRate).toFixed(1)}秒のうち、言葉と判定された ${deleteRanges.length}区間 を無音にしました。`;
+      $("resultInfo").textContent = `全体 ${(totalSamples / sampleRate).toFixed(1)}秒のうち、発話イベントと判定された ${deleteRanges.length}区間 を無音にしました。`;
       $("resultArea").style.display = "block";
-      setStatus("完了！下のプレイヤーで「言葉だけが消えているか」聴いてみてね");
+      setStatus("完了！下のプレイヤーで「発話だけが消えているか」聴いてみてね");
     }
 
     (async () => {
       try {
         const updated = await checkAndApplyLatest();
         if (updated) return;
-        setStatus("門番AIを読み込み中…");
-        await vadInit();
-        $("rec").disabled = false;
-        $("rec").textContent = "録音開始";
-        setStatus("準備完了！「録音開始」を押してテストしてね");
+
+        if (useOSSpeech) {
+          $("modeBadge").textContent = "判定エンジン: iOS標準 音声認識モード";
+          $("rec").disabled = false;
+          $("rec").textContent = "録音開始";
+          setStatus("準備完了！「録音開始」を押してテストしてね");
+        } else {
+          $("modeBadge").textContent = "判定エンジン: Silero VAD 音響解析モード";
+          setStatus("音響解析モデルを読み込み中…");
+          await vadInit();
+          $("rec").disabled = false;
+          $("rec").textContent = "録音開始";
+          setStatus("準備完了！「録音開始」を押してテストしてね");
+        }
       } catch (e) {
         setStatus("準備エラー: " + (e && e.message || e));
       }
